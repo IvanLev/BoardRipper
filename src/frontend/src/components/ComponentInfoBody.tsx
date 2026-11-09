@@ -163,6 +163,8 @@ export function ComponentInfoBody({
   const metaRows: Array<[string, string]> = [];
   if (meta?.partType) metaRows.push(['Type', meta.partType]);
   if (meta?.value) metaRows.push(['Value', meta.value]);
+  if (meta?.partNumber) metaRows.push(['Part number', meta.partNumber]);
+  if (meta?.manufacturer) metaRows.push(['Manufacturer', meta.manufacturer]);
   if (meta?.package) metaRows.push(['Package', meta.package]);
   if (meta?.serial) metaRows.push(['Serial', meta.serial]);
   if (meta?.heightMils != null) metaRows.push(['Height', `${meta.heightMils.toFixed(2)} mils`]);

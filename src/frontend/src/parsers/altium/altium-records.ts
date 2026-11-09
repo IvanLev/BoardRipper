@@ -28,6 +28,7 @@ import type {
   AFill6,
   ARegion6,
   AText6,
+  AComponentParams,
   AWideStringTable,
 } from './altium-types';
 import { AltiumStream } from './altium-stream';
@@ -177,7 +178,57 @@ export function parseComponents6(buf: Uint8Array): AComponent6[] {
       y: readPropInt(props, 'Y', 0),
       rotation: readPropFloat(props, 'ROTATION', 0),
       locked: readPropBool(props, 'LOCKED', false),
+      uniqueId: readPropString(props, 'UNIQUEID', ''),
     });
+  }
+  return out;
+}
+
+/**
+ * PrimitiveParameters/Data — a component's schematic parameters
+ * (Manufacturer, Part number, Tolerance, …), carried over from the
+ * schematic. Not read by KiCad; layout established from Altium Designer
+ * files. Length-prefixed property-bag records, in runs:
+ *
+ *   |PRIMITIVEID=<uid>|ID=Component#<n>|APPURTENANCE=Footprint|VARIANTGUID=Footprint|COUNT=0
+ *   |PRIMITIVEID=<uid>|ID=Component#<n>|APPURTENANCE=System|VARIANTGUID=System|COUNT=0
+ *   |PRIMITIVEID=<uid>|ID=Component#<n>|VARIANTGUID=|COUNT=<k>
+ *   |NAME=<name>|VALUE=<value>|ISIMPORTED=TRUE        ← k of these
+ *
+ * A header is followed by COUNT parameter records. `<n>` is the component's
+ * index in Components6 record order and `<uid>` its UNIQUEID (both held for
+ * every component on the boards this was checked on). Only the base block —
+ * empty VARIANTGUID, no APPURTENANCE — is kept; an assembly variant's block
+ * carries that variant's GUID and is skipped.
+ */
+export function parsePrimitiveParameters6(buf: Uint8Array): AComponentParams[] {
+  const out: AComponentParams[] = [];
+  let current: AComponentParams | null = null;
+  let remaining = 0;
+  for (const props of iterateRecords(buf)) {
+    if (props.has('ID')) {
+      remaining = readPropInt(props, 'COUNT', 0);
+      const id = readPropString(props, 'ID', '');
+      const isBase = !props.has('APPURTENANCE') && readPropString(props, 'VARIANTGUID', '') === '';
+      const m = /^Component#(\d+)$/.exec(id);
+      if (isBase && (m || props.has('PRIMITIVEID'))) {
+        current = {
+          componentIndex: m ? parseInt(m[1], 10) : -1,
+          primitiveId: readPropString(props, 'PRIMITIVEID', ''),
+          params: new Map(),
+        };
+        out.push(current);
+      } else {
+        current = null;
+      }
+      continue;
+    }
+    if (remaining > 0) {
+      remaining--;
+      if (current && props.has('NAME')) {
+        current.params.set(readPropString(props, 'NAME', ''), readPropString(props, 'VALUE', ''));
+      }
+    }
   }
   return out;
 }

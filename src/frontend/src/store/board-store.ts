@@ -636,13 +636,14 @@ export function boardHasCopper(board: BoardData | null | undefined): boolean {
 export const BUTTERFLY_COPPER_HIDDEN_MESSAGE =
   'Butterfly shows both sides flat, so traces, vias and copper layers are hidden while it is on.';
 
-/** Board search: a part matches on its reference, its value / part number
- *  (`meta.value` — XZZ body labels, TVW values, Altium Comments; the same
- *  field MCP `find_parts` searches), or any of its pins' nets. `ql` is the
+/** Board search: a part matches on its reference, its value (`meta.value` —
+ *  XZZ body labels, TVW values, Altium Comments), its manufacturer part
+ *  number (`meta.partNumber`), or any of its pins' nets. `ql` is the
  *  lower-cased query. */
 function partMatchesQuery(p: Part, ql: string): boolean {
   return p.name.toLowerCase().includes(ql)
     || (p.meta?.value?.toLowerCase().includes(ql) ?? false)
+    || (p.meta?.partNumber?.toLowerCase().includes(ql) ?? false)
     || p.pins.some(pin => pin.net.toLowerCase().includes(ql));
 }
 

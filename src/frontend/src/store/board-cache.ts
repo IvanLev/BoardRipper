@@ -146,7 +146,9 @@ const MAX_PDF_BYTES_TOTAL = 256 * 1024 * 1024;
 // 105: Altium Regions6 vertex encoding is per stream, as in KiCad (cutout and
 //     shape-based records in Regions6 were misread and failed the file), and
 //     ISBOARDCUTOUT regions are no longer drawn as copper.
-const PARSER_VERSION = 105;
+// 106: Altium reads component parameters (PrimitiveParameters) into
+//     Part.meta.partNumber / Part.meta.manufacturer.
+const PARSER_VERSION = 106;
 
 interface CachedBoard {
   key: string;

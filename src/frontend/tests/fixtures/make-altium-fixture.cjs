@@ -1,5 +1,5 @@
 // Rewrite an Altium .PcbDoc keeping only the streams BoardRipper's parser reads.
-// Produced tests/fixtures/altium-comments.PcbDoc (2.2 MB → 241 KB; the parsed
+// Produced tests/fixtures/altium-comments.PcbDoc (2.2 MB → ~260 KB; the parsed
 // BoardData is identical to the original's — 3D models, rules, fonts and the
 // Board6 layer caches are what goes).
 //
@@ -9,7 +9,7 @@ const fs = require('fs');
 const [src, dst] = process.argv.slice(2);
 const c = CFB.read(fs.readFileSync(src), { type: 'buffer' });
 const keep = ['FileHeader', 'Board6', 'Components6', 'Pads6', 'Nets6', 'Classes6', 'WideStrings6', 'Texts6',
-  'Tracks6', 'Vias6', 'Arcs6', 'Fills6', 'Regions6', 'ShapeBasedRegions6'];
+  'Tracks6', 'Vias6', 'Arcs6', 'Fills6', 'Regions6', 'ShapeBasedRegions6', 'PrimitiveParameters'];
 const out = CFB.utils.cfb_new();
 for (let i = 0; i < c.FullPaths.length; i++) {
   const p = c.FullPaths[i].replace(/^Root Entry\//, '');

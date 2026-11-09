@@ -28,7 +28,7 @@ describe('part-list-order', () => {
     expect(naturalCompare('R2', 'R10')).toBeLessThan(0);
   });
 
-  it('part-number sort puts parts without one last, ties by reference', () => {
+  it('value sort puts parts without one last, ties by reference', () => {
     expect(names(sortParts(parts, 'value'))).toEqual(['R2', 'R3', 'R10', 'U2', 'C1', 'U1', 'TP1']);
   });
 
@@ -36,7 +36,7 @@ describe('part-list-order', () => {
     expect(names(sortParts(parts, 'pins')).slice(0, 2)).toEqual(['U2', 'U1']);
   });
 
-  it('groups by part number case-insensitively, empty group last', () => {
+  it('groups by value case-insensitively, empty group last', () => {
     const g = groupParts(parts, 'value', 'ref');
     expect(g.map(x => [x.label, names(x.parts)])).toEqual([
       ['0R2J', ['R2']],
@@ -44,7 +44,7 @@ describe('part-list-order', () => {
       ['13156', ['U2']],
       ['SC1U25V2KX', ['C1']],
       ['TPS70933DRV', ['U1']],
-      ['No part number', ['TP1']],
+      ['No value', ['TP1']],
     ]);
   });
 

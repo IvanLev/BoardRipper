@@ -287,6 +287,8 @@ function partSummary(pt: BoardData['parts'][number]) {
     refdes: pt.name,
     side: pt.side,
     value: pt.meta?.value ?? null,
+    part_number: pt.meta?.partNumber ?? null,
+    manufacturer: pt.meta?.manufacturer ?? null,
     serial: pt.meta?.serial ?? null,
     package: pt.meta?.package ?? null,
     part_type: pt.meta?.partType ?? null,
@@ -332,6 +334,8 @@ function partInfo(part: BoardData['parts'][number]) {
     // Descriptive metadata the boardview carried. value/serial frequently
     // hold the real part name/number — invaluable when no schematic exists.
     value: part.meta?.value ?? null,
+    part_number: part.meta?.partNumber ?? null,
+    manufacturer: part.meta?.manufacturer ?? null,
     serial: part.meta?.serial ?? null,
     package: part.meta?.package ?? null,
     part_type: part.meta?.partType ?? null,
@@ -458,7 +462,7 @@ async function dispatch(op: string, p: any): Promise<any> {
       const q = String(p.query ?? '').toLowerCase().trim();
       if (!q) throw new Error('find_parts: query required');
       const hits = b.parts.filter((pt) => {
-        const hay = [pt.name, pt.meta?.value, pt.meta?.serial, pt.meta?.package, pt.meta?.partType]
+        const hay = [pt.name, pt.meta?.value, pt.meta?.partNumber, pt.meta?.manufacturer, pt.meta?.serial, pt.meta?.package, pt.meta?.partType]
           .filter(Boolean).join(' ').toLowerCase();
         return hay.includes(q);
       }).map(partSummary);

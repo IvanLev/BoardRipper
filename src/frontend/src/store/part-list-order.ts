@@ -9,19 +9,23 @@
 
 import type { Part } from '../parsers/types';
 
-export type PartSortKey = 'ref' | 'value' | 'package' | 'pins';
-export type PartGroupKey = 'none' | 'value' | 'package' | 'prefix' | 'side';
+export type PartSortKey = 'ref' | 'value' | 'partNumber' | 'manufacturer' | 'package' | 'pins';
+export type PartGroupKey = 'none' | 'value' | 'partNumber' | 'manufacturer' | 'package' | 'prefix' | 'side';
 
 export const PART_SORT_LABELS: Record<PartSortKey, string> = {
   ref: 'Reference',
-  value: 'Part number',
+  value: 'Value',
+  partNumber: 'Part number',
+  manufacturer: 'Manufacturer',
   package: 'Package',
   pins: 'Pin count',
 };
 
 export const PART_GROUP_LABELS: Record<PartGroupKey, string> = {
   none: 'No grouping',
-  value: 'Part number',
+  value: 'Value',
+  partNumber: 'Part number',
+  manufacturer: 'Manufacturer',
   package: 'Package',
   prefix: 'Type (R, C, U…)',
   side: 'Side',
@@ -29,7 +33,9 @@ export const PART_GROUP_LABELS: Record<PartGroupKey, string> = {
 
 /** Label of the group that collects parts without the grouped field. */
 export const NO_VALUE_GROUP: Record<Exclude<PartGroupKey, 'none'>, string> = {
-  value: 'No part number',
+  value: 'No value',
+  partNumber: 'No part number',
+  manufacturer: 'No manufacturer',
   package: 'No package',
   prefix: 'Other',
   side: 'Other',
@@ -52,6 +58,8 @@ export function refPrefix(name: string): string {
 function fieldOf(p: Part, key: Exclude<PartGroupKey, 'none'> | Exclude<PartSortKey, 'ref' | 'pins'>): string {
   switch (key) {
     case 'value': return p.meta?.value?.trim() ?? '';
+    case 'partNumber': return p.meta?.partNumber?.trim() ?? '';
+    case 'manufacturer': return p.meta?.manufacturer?.trim() ?? '';
     case 'package': return p.meta?.package?.trim() ?? '';
     case 'prefix': return refPrefix(p.name);
     case 'side': return p.side;

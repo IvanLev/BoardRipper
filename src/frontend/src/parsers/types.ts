@@ -149,6 +149,11 @@ export interface PartMeta {
   partType?: string;
   /** Manufacturer / part serial number */
   serial?: string;
+  /** Manufacturer part number (MPN), when the source carries one apart from
+   *  the value — e.g. an Altium component's "Part number" parameter. */
+  partNumber?: string;
+  /** Manufacturer name, e.g. an Altium component's "Manufacturer" parameter. */
+  manufacturer?: string;
   /** Component height in mils (Z-axis) */
   heightMils?: number;
   /** Rotation in degrees, if the source format records it */

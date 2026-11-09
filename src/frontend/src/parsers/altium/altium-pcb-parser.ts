@@ -20,6 +20,7 @@ import {
   parseClasses6,
   parseWideStrings6,
   parseTexts6,
+  parsePrimitiveParameters6,
 } from './altium-records';
 import { assembleBoardData } from './altium-assembler';
 import type { AltiumPcbDb } from './altium-types';
@@ -77,6 +78,7 @@ export function parseAltiumPcb(buffer: ArrayBuffer): BoardData {
       ...optional('ShapeBasedRegions6', [], () => parseRegions6(cfb.getStream('ShapeBasedRegions6/Data') ?? empty, true)),
     ],
     texts: optional('Texts6', [], () => parseTexts6(cfb.getStream('Texts6/Data') ?? empty, wideStrings)),
+    componentParams: optional('PrimitiveParameters', [], () => parsePrimitiveParameters6(cfb.getStream('PrimitiveParameters/Data') ?? empty)),
     nets: parseNets6(must('Nets6/Data')),
     classes: parseClasses6(cfb.getStream('Classes6/Data') ?? empty),
     wideStrings,

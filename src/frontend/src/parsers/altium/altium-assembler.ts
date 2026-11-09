@@ -19,6 +19,7 @@ import type {
   AFill6,
   ARegion6,
   AText6,
+  AComponentParams,
 } from './altium-types';
 import { altiumToMils, altiumYToMils, altiumAngleToDegrees } from './altium-units';
 import { altiumLayerSide, isAltiumPadCopperLayer, ALTIUM_LAYER } from './altium-layers';
@@ -74,6 +75,42 @@ function buildCommentTable(texts: AText6[]): Map<number, string> {
   return out;
 }
 
+/** Parameter names that hold a manufacturer part number / a manufacturer,
+ *  compared with case, spaces and punctuation removed. Distributor fields
+ *  ("Supplier Part Number 1", "Digi-Key Part Number") are deliberately not
+ *  here: that number is the distributor's, not the part's. */
+const PART_NUMBER_PARAMS = ['manufacturerpartnumber', 'manufacturerpartnumber1', 'partnumber', 'mpn', 'mfrpartnumber', 'mfrpn', 'mfgpartnumber'];
+const MANUFACTURER_PARAMS = ['manufacturer', 'manufacturer1', 'manufacturername', 'mfr', 'mfg'];
+
+/** First parameter whose normalised name is in `names` (in that order of
+ *  preference) and whose value says something. */
+export function pickAltiumParam(params: ReadonlyMap<string, string>, names: readonly string[]): string | undefined {
+  const byNorm = new Map<string, string>();
+  for (const [k, v] of params) {
+    const norm = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!byNorm.has(norm)) byNorm.set(norm, v);
+  }
+  for (const n of names) {
+    const v = byNorm.get(n)?.trim();
+    if (v && v !== '*' && v !== '-' && altiumCommentValue(v) !== undefined) return v;
+  }
+  return undefined;
+}
+
+/** Component index → its base parameters, matched by UNIQUEID (the record's
+ *  PRIMITIVEID), falling back to the `Component#<n>` index. */
+function buildParamTable(components: AComponent6[], blocks: AComponentParams[]): Map<number, ReadonlyMap<string, string>> {
+  const byUid = new Map<string, number>();
+  components.forEach((c, i) => { if (c.uniqueId) byUid.set(c.uniqueId, i); });
+  const out = new Map<number, ReadonlyMap<string, string>>();
+  for (const b of blocks) {
+    const byId = b.primitiveId ? byUid.get(b.primitiveId) : undefined;
+    const ci = byId ?? (b.componentIndex >= 0 && b.componentIndex < components.length ? b.componentIndex : undefined);
+    if (ci !== undefined && !out.has(ci)) out.set(ci, b.params);
+  }
+  return out;
+}
+
 export function assembleBoardData(db: AltiumPcbDb): BoardData {
   const netNames = db.nets.map(n => n.name);
   const usedCopper = collectUsedCopperLayers(db);
@@ -91,6 +128,7 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
   }
 
   const commentByComp = buildCommentTable(db.texts);
+  const paramsByComp = buildParamTable(db.components, db.componentParams);
 
   const parts: Part[] = [];
   for (let ci = 0; ci < db.components.length; ci++) {
@@ -135,6 +173,13 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
     const comment = commentByComp.get(ci);
     if (comment) meta.value = comment;
     if (comp.pattern) meta.package = comp.pattern;
+    const params = paramsByComp.get(ci);
+    if (params) {
+      const pn = pickAltiumParam(params, PART_NUMBER_PARAMS);
+      const mfr = pickAltiumParam(params, MANUFACTURER_PARAMS);
+      if (pn) meta.partNumber = pn;
+      if (mfr) meta.manufacturer = mfr;
+    }
     if (comp.componentName) meta.partType = comp.componentName;
     parts.push({
       name: comp.designator || `_unnamed_${ci}`,

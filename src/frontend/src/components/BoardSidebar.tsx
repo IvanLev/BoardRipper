@@ -1132,9 +1132,11 @@ function SearchTab({ tabId }: { tabId: number }) {
   // Compute filtered results (show all when no query)
   const ql = query.toLowerCase();
   const matchedParts = useMemo(
-    // Reference or value / part number (meta.value: XZZ, TVW, Altium Comment).
+    // Reference, value (meta.value: XZZ, TVW, Altium Comment) or MPN.
     () => ql
-      ? sortedParts.filter(p => p.name.toLowerCase().includes(ql) || (p.meta?.value?.toLowerCase().includes(ql) ?? false))
+      ? sortedParts.filter(p => p.name.toLowerCase().includes(ql)
+        || (p.meta?.value?.toLowerCase().includes(ql) ?? false)
+        || (p.meta?.partNumber?.toLowerCase().includes(ql) ?? false))
       : sortedParts,
     [sortedParts, ql],
   );

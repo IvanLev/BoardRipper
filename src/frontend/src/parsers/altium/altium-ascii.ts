@@ -85,6 +85,7 @@ export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
           y: readPropInt(props, 'Y', 0),
           rotation: readPropFloat(props, 'ROTATION', 0),
           locked: readPropBool(props, 'LOCKED', false),
+          uniqueId: readPropString(props, 'UNIQUEID', ''),
         });
         break;
       case 'Text': {
@@ -131,6 +132,7 @@ export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
     fills: [],
     regions: [],
     texts,
+    componentParams: [],
     nets,
     classes: [],
     wideStrings: { byIndex: () => '' },

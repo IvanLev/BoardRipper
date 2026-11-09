@@ -25,6 +25,20 @@ export interface AComponent6 {
   y: number;
   rotation: number;
   locked: boolean;
+  /** Components6 UNIQUEID — the PRIMITIVEID that PrimitiveParameters keys
+   *  its records by. '' when absent. */
+  uniqueId: string;
+}
+
+/** One component's schematic parameters (PrimitiveParameters stream): the
+ *  base set, i.e. the block with an empty VARIANTGUID and no APPURTENANCE. */
+export interface AComponentParams {
+  /** From `ID=Component#<n>`; -1 when the ID is not in that form. */
+  componentIndex: number;
+  /** PRIMITIVEID — equals the component's UNIQUEID. */
+  primitiveId: string;
+  /** Parameter name → value, in file order. */
+  params: Map<string, string>;
 }
 
 export interface APad6 {
@@ -143,6 +157,7 @@ export interface AltiumPcbDb {
   fills: AFill6[];
   regions: ARegion6[];
   texts: AText6[];
+  componentParams: AComponentParams[];
   nets: ANet6[];
   classes: AClass6[];
   wideStrings: AWideStringTable;

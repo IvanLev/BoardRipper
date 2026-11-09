@@ -40,6 +40,20 @@ test('Info panel shows the Comment as Value beside Package', async ({ page }) =>
   }
 });
 
+test('Info panel shows the Part number and Manufacturer parameters', async ({ page }) => {
+  await openBoard(page);
+  await page.locator('[data-board-tab="info"]').click();
+  await selectRef(page, 'U4');
+  const meta = page.getByTestId('part-meta');
+  await expect(meta.locator('tr', { hasText: 'Part number' })).toContainText('13104');
+  await expect(meta.locator('tr', { hasText: 'Manufacturer' })).toContainText('PNI');
+  // U1 has no such parameters in the file: no rows, not empty ones.
+  await selectRef(page, 'U1');
+  await expect(meta.locator('tr', { hasText: 'Value' })).toContainText('TPS70933DRV');
+  await expect(meta.locator('tr', { hasText: 'Manufacturer' })).toHaveCount(0);
+  await expect(meta.locator('tr', { hasText: 'Part number' })).toHaveCount(0);
+});
+
 test('board search finds parts by their Comment', async ({ page }) => {
   await openBoard(page);
   const results = (q: string) => page.evaluate((query) => {

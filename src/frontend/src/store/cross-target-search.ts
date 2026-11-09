@@ -28,7 +28,8 @@ export function countInBoardTab(term: string, tabId: number): number {
 
   let count = 0;
   for (const p of tab.board.parts) {
-    if (p.name.toLowerCase().includes(t) || p.meta?.value?.toLowerCase().includes(t)) count++;
+    if (p.name.toLowerCase().includes(t) || p.meta?.value?.toLowerCase().includes(t)
+      || p.meta?.partNumber?.toLowerCase().includes(t)) count++;
   }
   for (const [name] of tab.board.nets) {
     if (name.toLowerCase().includes(t)) count++;

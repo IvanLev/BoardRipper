@@ -584,6 +584,55 @@ test.describe('altium Texts6 component Comment', () => {
   });
 });
 
+test.describe('altium PrimitiveParameters', () => {
+  test('Part number and Manufacturer come from the component parameters', async () => {
+    const { parseAltiumPcb } = await import('../src/parsers/altium/altium-pcb-parser');
+    const buf = fs.readFileSync(COMMENT_FIXTURE);
+    const board = parseAltiumPcb(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+    const meta = (ref: string) => board.parts.find(p => p.name === ref)!.meta!;
+    expect(meta('U4').manufacturer).toBe('PNI');
+    expect(meta('U4').partNumber).toBe('13104');         // "Manufacturer Part Number"
+    expect(meta('CN1').manufacturer).toBe('Hirose');
+    expect(meta('CN1').partNumber).toBe('BM23FR0.6-12DP-0.35V');
+    expect(meta('U1').manufacturer).toBeUndefined();     // no such parameter on U1
+    expect(meta('R11').partNumber).toBeUndefined();
+  });
+
+  test('parsePrimitiveParameters6 keeps only the base block of each component', async () => {
+    const { parsePrimitiveParameters6 } = await import('../src/parsers/altium/altium-records');
+    const recs = [
+      '|PRIMITIVEID=AAA|ID=Component#0|APPURTENANCE=Footprint|VARIANTGUID=Footprint|COUNT=0',
+      '|PRIMITIVEID=AAA|ID=Component#0|VARIANTGUID=|COUNT=2',
+      '|NAME=Manufacturer|VALUE=Samsung|ISIMPORTED=TRUE',
+      '|NAME=Part number|VALUE=CL21A226MOCLRNC|ISIMPORTED=TRUE',
+      '|PRIMITIVEID=AAA|ID=Component#0|VARIANTGUID={1234}|COUNT=1',
+      '|NAME=Part number|VALUE=VARIANT-ONLY|ISIMPORTED=TRUE',
+      '|PRIMITIVEID=BBB|ID=Component#1|VARIANTGUID=|COUNT=0',
+    ];
+    const parts: number[] = [];
+    for (const r of recs) {
+      const b = new TextEncoder().encode(r + '\0');
+      parts.push(b.length & 0xff, (b.length >> 8) & 0xff, 0, 0, ...b);
+    }
+    const blocks = parsePrimitiveParameters6(new Uint8Array(parts));
+    expect(blocks.map(b => [b.componentIndex, b.primitiveId, [...b.params]])).toEqual([
+      [0, 'AAA', [['Manufacturer', 'Samsung'], ['Part number', 'CL21A226MOCLRNC']]],
+      [1, 'BBB', []],
+    ]);
+  });
+
+  test('pickAltiumParam matches name spellings and ignores placeholders', async () => {
+    const { pickAltiumParam } = await import('../src/parsers/altium/altium-assembler');
+    const PN = ['manufacturerpartnumber', 'manufacturerpartnumber1', 'partnumber', 'mpn'];
+    expect(pickAltiumParam(new Map([['Part Number', 'X1']]), PN)).toBe('X1');
+    expect(pickAltiumParam(new Map([['Manufacturer Part Number 1', 'X2']]), PN)).toBe('X2');
+    expect(pickAltiumParam(new Map([['MPN', '*'], ['Part number', '']]), PN)).toBeUndefined();
+    expect(pickAltiumParam(new Map([['Supplier Part Number 1', 'DK-123']]), PN)).toBeUndefined();
+    // Preference order: the manufacturer's number over a generic "Part number".
+    expect(pickAltiumParam(new Map([['Part number', 'A'], ['Manufacturer Part Number', 'B']]), PN)).toBe('B');
+  });
+});
+
 test.describe('altium non-copper pads', () => {
   test('paste-layer pads are not pins', async () => {
     const { parseAltiumPcb } = await import('../src/parsers/altium/altium-pcb-parser');
