@@ -627,6 +627,16 @@ export function boardHasCopper(board: BoardData | null | undefined): boolean {
 export const BUTTERFLY_COPPER_HIDDEN_MESSAGE =
   'Butterfly shows both sides flat, so traces, vias and copper layers are hidden while it is on.';
 
+/** Board search: a part matches on its reference, its value / part number
+ *  (`meta.value` — XZZ body labels, TVW values, Altium Comments; the same
+ *  field MCP `find_parts` searches), or any of its pins' nets. `ql` is the
+ *  lower-cased query. */
+function partMatchesQuery(p: Part, ql: string): boolean {
+  return p.name.toLowerCase().includes(ql)
+    || (p.meta?.value?.toLowerCase().includes(ql) ?? false)
+    || p.pins.some(pin => pin.net.toLowerCase().includes(ql));
+}
+
 class BoardStore extends Emitter {
   private _tabs: BoardTab[] = [];
   private _activeTabId: number | null = null;
@@ -2367,8 +2377,7 @@ class BoardStore extends Emitter {
     const indices = new Set<number>();
     for (let i = 0; i < board.parts.length; i++) {
       const p = board.parts[i];
-      if (p.name.toLowerCase().includes(ql) ||
-          p.pins.some(pin => pin.net.toLowerCase().includes(ql))) {
+      if (partMatchesQuery(p, ql)) {
         results.push(p);
         indices.add(i);
       }
@@ -2393,10 +2402,7 @@ class BoardStore extends Emitter {
     const tab = this.getTab(tabId);
     if (!tab?.board || !tab.searchQuery) return [];
     const ql = tab.searchQuery.toLowerCase();
-    return tab.board.parts.filter(p =>
-      p.name.toLowerCase().includes(ql) ||
-      p.pins.some(pin => pin.net.toLowerCase().includes(ql))
-    );
+    return tab.board.parts.filter(p => partMatchesQuery(p, ql));
   }
 
   get focusRequest(): FocusRequest | null { return this._focusRequest; }

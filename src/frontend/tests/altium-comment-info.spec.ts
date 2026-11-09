@@ -39,3 +39,20 @@ test('Info panel shows the Comment as Value beside Package', async ({ page }) =>
     await expect(meta.locator('tr', { hasText: 'Package' })).toContainText(pkg);
   }
 });
+
+test('board search finds parts by their Comment', async ({ page }) => {
+  await openBoard(page);
+  const results = (q: string) => page.evaluate((query) => {
+    const bs = (window as unknown as {
+      __boardStore: { setSearch(q: string): void; searchResults: { name: string }[] };
+    }).__boardStore;
+    bs.setSearch(query);
+    return bs.searchResults.map(p => p.name).sort();
+  }, q);
+  // Case-insensitive, substring — like the refdes and net matches.
+  expect(await results('tps70933')).toEqual(['U1']);
+  expect(await results('33KR2F')).toEqual(['R11']);
+  expect(await results('SC1U25V2KX')).toEqual(['C1', 'C2', 'C3', 'C4', 'C5']);
+  // Reference matching is unchanged.
+  expect(await results('CN1')).toEqual(['CN1']);
+});

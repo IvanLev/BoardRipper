@@ -13,10 +13,12 @@ import { openBoardSearch } from '../panels/board-viewer-bridge';
 
 /**
  * Count substring (case-insensitive) matches of `term` across the given
- * board tab's parts and net names. Returns 0 if tab not found or not loaded.
+ * board tab's parts (reference or value / part number) and net names.
+ * Returns 0 if tab not found or not loaded.
  *
- * Matches the legacy scan in Toolbar.GlobalSearch so the global dropdown's
- * counts are preserved byte-for-byte.
+ * A part counts once whether its reference or its value matched — the same
+ * parts the board search (`boardStore` `partMatchesQuery`) lists by name or
+ * value, so a part-number query is not reported as "no hits" here.
  */
 export function countInBoardTab(term: string, tabId: number): number {
   const t = term.trim().toLowerCase();
@@ -26,7 +28,7 @@ export function countInBoardTab(term: string, tabId: number): number {
 
   let count = 0;
   for (const p of tab.board.parts) {
-    if (p.name.toLowerCase().includes(t)) count++;
+    if (p.name.toLowerCase().includes(t) || p.meta?.value?.toLowerCase().includes(t)) count++;
   }
   for (const [name] of tab.board.nets) {
     if (name.toLowerCase().includes(t)) count++;
