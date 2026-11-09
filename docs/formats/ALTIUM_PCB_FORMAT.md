@@ -36,6 +36,10 @@ Multi-layer copper (`Tracks6`, `Vias6`, `Arcs6`, `Fills6`, `Regions6`, `Polygons
 - Pads with complex shape mode (Altium "PADMODE" != SIMPLE — typical BGA pad stackups) are decoded with `xsize=0, ysize=0` because the size table lives in subrecord 6 (`APAD6_SIZE_AND_SHAPE`) which P1 skips. These render as zero-size points. THT detection (`layer === MULTI_LAYER`) still works for them. Will be addressed in Phase 2.
 - Pad shape mapping collapses to round-or-rect; octagon, roundrect, custom-shape pads land as rect with correct bounding rectangle but lose shape detail. Phase 2 will surface the full `PadShape` enum.
 
+### Pads on non-copper layers
+
+A pad primitive may sit on any layer. Only pads on a copper layer (Top … Bottom), an internal plane (39–54) or Multi-Layer (74) are pins; one on paste, solder mask, overlay or a mechanical layer is a drawing and is dropped from pins and copper pads (`isAltiumPadCopperLayer`). This is KiCad's rule (`ConvertPads6ToFootprintItem` → `…OnNonCopper` imports them as graphics). Typical cases: a thermal pad whose paste is split into several `SOLDERPASTE` pads on the paste layer, and footprints that repeat a pin number on a netless paste-layer pad.
+
 ### Component Comment (`Texts6`)
 
 `Components6` has no Comment field — `SOURCELIBREFERENCE` / `SOURCEDESCRIPTION` are library data, not the Comment. The Comment (and the Designator) are ordinary text primitives in `Texts6`, owned by the component through a component index and marked by a flag. Layout per KiCad's `ATEXT6::ATEXT6` (`altium_parser_pcb.cpp`):

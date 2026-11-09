@@ -584,6 +584,34 @@ test.describe('altium Texts6 component Comment', () => {
   });
 });
 
+test.describe('altium non-copper pads', () => {
+  test('paste-layer pads are not pins', async () => {
+    const { parseAltiumPcb } = await import('../src/parsers/altium/altium-pcb-parser');
+    const buf = fs.readFileSync(COMMENT_FIXTURE);
+    const board = parseAltiumPcb(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+    const pins = (ref: string) => board.parts.find(p => p.name === ref)!.pins;
+    // DRV0006A: 6 pins + thermal pad. The thermal pad's paste is split into
+    // three SOLDERPASTE pads on Bottom Paste — they used to read as 10 pins.
+    expect(pins('U1').map(p => p.name).sort()).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+    // This footprint repeats pins 1 and 2 on the paste layer (netless copies).
+    expect(pins('U3').map(p => `${p.name}:${p.net}`).sort()).toEqual(['1:X_IN_P', '2:X_IN_N']);
+    expect(board.parts.every(p => new Set(p.pins.map(q => q.name)).size === p.pins.length)).toBe(true);
+    expect(board.parts.some(p => p.pins.some(q => q.name === 'SOLDERPASTE'))).toBe(false);
+  });
+
+  test('isAltiumPadCopperLayer follows KiCad: copper, plane, multi-layer', async () => {
+    const { isAltiumPadCopperLayer, ALTIUM_LAYER } = await import('../src/parsers/altium/altium-layers');
+    for (const l of [ALTIUM_LAYER.TOP, ALTIUM_LAYER.MID_LAYER_1, ALTIUM_LAYER.BOTTOM,
+      ALTIUM_LAYER.INTERNAL_PLANE_1, ALTIUM_LAYER.INTERNAL_PLANE_16, ALTIUM_LAYER.MULTI_LAYER]) {
+      expect(isAltiumPadCopperLayer(l)).toBe(true);
+    }
+    for (const l of [ALTIUM_LAYER.TOP_OVERLAY, ALTIUM_LAYER.TOP_PASTE, ALTIUM_LAYER.BOTTOM_PASTE,
+      ALTIUM_LAYER.TOP_SOLDER, ALTIUM_LAYER.BOTTOM_SOLDER, ALTIUM_LAYER.UNKNOWN, 57]) {
+      expect(isAltiumPadCopperLayer(l)).toBe(false);
+    }
+  });
+});
+
 test('AltiumPcbFormat appears in the format list with sister extensions', async () => {
   const parsers = await import('../src/parsers');
   const all = parsers.getAllFormats();

@@ -141,7 +141,9 @@ const MAX_PDF_BYTES_TOTAL = 256 * 1024 * 1024;
 //     for placeholder pad geometry separately from part pins.
 // 103: Altium reads each component's Comment (Texts6 isComment record) into
 //     Part.meta.value; WideStrings6 entries lose their trailing NUL.
-const PARSER_VERSION = 103;
+// 104: Altium pads on non-copper layers (paste, mask, overlay — e.g. a split
+//     thermal pad's SOLDERPASTE pads) are no longer pins or copper pads.
+const PARSER_VERSION = 104;
 
 interface CachedBoard {
   key: string;

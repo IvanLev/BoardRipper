@@ -21,7 +21,7 @@ import type {
   AText6,
 } from './altium-types';
 import { altiumToMils, altiumYToMils, altiumAngleToDegrees } from './altium-units';
-import { altiumLayerSide, ALTIUM_LAYER } from './altium-layers';
+import { altiumLayerSide, isAltiumPadCopperLayer, ALTIUM_LAYER } from './altium-layers';
 
 function partSide(c: AComponent6): 'top' | 'bottom' {
   const side = altiumLayerSide(c.layer);
@@ -79,8 +79,12 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
   const usedCopper = collectUsedCopperLayers(db);
   const { idxByAltiumLayer: copperLayerByAltium, names: layerNames } = buildCopperLayerTable(db.board.layerNames, usedCopper);
 
+  // Paste / mask / overlay pads are drawings, not pins (KiCad imports them
+  // as graphics) — keep them out of the pin table, pin count and copper pads.
+  const copperPads = db.pads.filter(pad => isAltiumPadCopperLayer(pad.layer));
+
   const padsByComp = new Map<number, APad6[]>();
-  for (const pad of db.pads) {
+  for (const pad of copperPads) {
     const arr = padsByComp.get(pad.componentIndex) ?? [];
     arr.push(pad);
     padsByComp.set(pad.componentIndex, arr);
@@ -157,7 +161,7 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
   const nets: Map<string, Net> = buildNets(parts);
 
   const pads: Pad[] = [
-    ...buildPads(db.pads, netNames),
+    ...buildPads(copperPads, netNames),
     ...buildFillPads(db.fills, netNames),
   ];
 

@@ -49,10 +49,28 @@ export const ALTIUM_LAYER = {
   BOTTOM_PASTE: 36,
   TOP_SOLDER: 37,
   BOTTOM_SOLDER: 38,
+  INTERNAL_PLANE_1: 39,
+  INTERNAL_PLANE_16: 54,
   MULTI_LAYER: 74,
 } as const;
 
 export type AltiumLayer = typeof ALTIUM_LAYER[keyof typeof ALTIUM_LAYER];
+
+/**
+ * Whether a pad on this layer is a real copper pad. Altium lets a pad
+ * primitive sit on any layer; one on paste, solder mask, overlay or a
+ * mechanical layer is a drawing, not a pin — a footprint's thermal pad is
+ * often split into several `SOLDERPASTE` pads on the paste layer, and some
+ * libraries repeat a pin's number on a paste-layer pad. KiCad imports such
+ * pads as graphics, never as pads (altium_pcb.cpp ::
+ * ConvertPads6ToFootprintItem: copper, internal plane or multi-layer → PAD,
+ * anything else → ConvertPads6ToFootprintItemOnNonCopper).
+ */
+export function isAltiumPadCopperLayer(layer: number): boolean {
+  return (layer >= ALTIUM_LAYER.TOP && layer <= ALTIUM_LAYER.BOTTOM)
+    || (layer >= ALTIUM_LAYER.INTERNAL_PLANE_1 && layer <= ALTIUM_LAYER.INTERNAL_PLANE_16)
+    || layer === ALTIUM_LAYER.MULTI_LAYER;
+}
 
 export function altiumLayerSide(layer: number): 'top' | 'bottom' | 'both' {
   switch (layer) {
