@@ -18,6 +18,7 @@ import type {
   AArc6,
   AFill6,
   ARegion6,
+  AText6,
 } from './altium-types';
 import { altiumToMils, altiumYToMils, altiumAngleToDegrees } from './altium-units';
 import { altiumLayerSide, ALTIUM_LAYER } from './altium-layers';
@@ -38,6 +39,41 @@ function pinNet(p: APad6, netNames: string[]): string {
   return netNames[p.netIndex];
 }
 
+/**
+ * A Comment text as a part value, or undefined when it says nothing.
+ *
+ * Altium "special strings" are placeholders the PCB editor substitutes at
+ * display time. A text that *is* one — `.Comment`, `.Designator`, `.Value`
+ * — is the unresolved placeholder, not data, and is dropped. The rule is
+ * KiCad's (altium_parser_utils.cpp :: AltiumPcbSpecialStringsToKiCadStrings):
+ * a leading `.` makes the whole string special unless it is an assignment
+ * (contains `=`). Likewise a bare `=Parameter` — the schematic's parameter
+ * reference syntax — names a value rather than being one.
+ */
+export function altiumCommentValue(text: string): string | undefined {
+  const t = text.trim();
+  if (!t) return undefined;
+  if (t.startsWith('.') && !t.includes('=')) return undefined;
+  if (/^=[A-Za-z_][\w]*$/.test(t)) return undefined;
+  return t;
+}
+
+/**
+ * Component index → its Comment string. KiCad assigns the Texts6 record that
+ * carries the isComment flag to the footprint's Value field (altium_pcb.cpp ::
+ * ConvertTexts6ToFootprintItemOnLayer); a component has one Comment, so the
+ * first usable one wins.
+ */
+function buildCommentTable(texts: AText6[]): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const t of texts) {
+    if (!t.isComment || t.componentIndex < 0 || out.has(t.componentIndex)) continue;
+    const v = altiumCommentValue(t.text);
+    if (v !== undefined) out.set(t.componentIndex, v);
+  }
+  return out;
+}
+
 export function assembleBoardData(db: AltiumPcbDb): BoardData {
   const netNames = db.nets.map(n => n.name);
   const usedCopper = collectUsedCopperLayers(db);
@@ -49,6 +85,8 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
     arr.push(pad);
     padsByComp.set(pad.componentIndex, arr);
   }
+
+  const commentByComp = buildCommentTable(db.texts);
 
   const parts: Part[] = [];
   for (let ci = 0; ci < db.components.length; ci++) {
@@ -90,6 +128,8 @@ export function assembleBoardData(db: AltiumPcbDb): BoardData {
       : { minX: origin.x - 50, minY: origin.y - 50, maxX: origin.x + 50, maxY: origin.y + 50 };
 
     const meta: NonNullable<Part['meta']> = { angleDeg: compRot };
+    const comment = commentByComp.get(ci);
+    if (comment) meta.value = comment;
     if (comp.pattern) meta.package = comp.pattern;
     if (comp.componentName) meta.partType = comp.componentName;
     parts.push({

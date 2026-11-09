@@ -7,6 +7,7 @@
  *   Net → ANet6
  *   Component → AComponent6
  *   Pad → APad6
+ *   Text → AText6 (only component Comment / Designator strings are used)
  *
  * Field keys are case-sensitive uppercase, matching the binary streams'
  * property-bag keys.
@@ -22,7 +23,24 @@ import {
 } from './altium-props';
 import { parseAltiumLayerName, ALTIUM_LAYER } from './altium-layers';
 import { assembleBoardData } from './altium-assembler';
-import type { AltiumPcbDb, ABoard6, AComponent6, APad6, ANet6 } from './altium-types';
+import type { AltiumPcbDb, ABoard6, AComponent6, APad6, ANet6, AText6 } from './altium-types';
+
+/**
+ * A Text record's string. Exports seen in the wild (e.g. EasyEDA's
+ * "Altium ASCII" output) carry it as `WIDESTRING=` — comma-separated UTF-16
+ * code units, `WIDESTRING=85,49` → "U1" — and some writers add a plain
+ * `TEXT=`; prefer the wide form, which is lossless.
+ */
+function asciiTextString(props: Map<string, string>): string {
+  const wide = props.get('WIDESTRING');
+  if (wide) {
+    const units = wide.split(',').map(v => parseInt(v, 10));
+    if (units.length > 0 && units.every(u => Number.isInteger(u) && u >= 0 && u <= 0xFFFF)) {
+      return String.fromCharCode(...units);
+    }
+  }
+  return readPropString(props, 'TEXT', '');
+}
 
 export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
   const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
@@ -31,6 +49,7 @@ export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
   const components: AComponent6[] = [];
   const pads: APad6[] = [];
   const nets: ANet6[] = [];
+  const texts: AText6[] = [];
 
   for (const line of lines) {
     if (!line.includes('|RECORD=')) continue;
@@ -68,6 +87,19 @@ export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
           locked: readPropBool(props, 'LOCKED', false),
         });
         break;
+      case 'Text': {
+        // `COMPONENT=<n>` is the owning component's index in record order
+        // (the binary Texts6 `component` field); a free board text has none.
+        // COMPONENTINDEX accepted too, the key this parser's Pad case reads.
+        const comp = readPropInt(props, 'COMPONENT', readPropInt(props, 'COMPONENTINDEX', -1));
+        texts.push({
+          componentIndex: comp,
+          isComment: readPropBool(props, 'COMMENT', false),
+          isDesignator: readPropBool(props, 'DESIGNATOR', false),
+          text: asciiTextString(props).replace(/\r\n/g, '\n'),
+        });
+        break;
+      }
       case 'Pad': {
         const layer = parseAltiumLayerName(readPropString(props, 'LAYER', 'TOP'));
         pads.push({
@@ -98,6 +130,7 @@ export function parseAltiumAscii(buffer: ArrayBuffer): BoardData {
     arcs: [],
     fills: [],
     regions: [],
+    texts,
     nets,
     classes: [],
     wideStrings: { byIndex: () => '' },

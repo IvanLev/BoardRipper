@@ -501,6 +501,89 @@ test.describe('altium-ascii', () => {
   });
 });
 
+// Checked-in fixture (unlike samples/altium/*), so these always run.
+// Minimised from a real Altium Designer board: only the streams the parser
+// reads are kept, and Board6 is cut down to the keys it reads; parsing it
+// yields BoardData identical to the original file. See make-altium-fixture.cjs.
+const COMMENT_FIXTURE = path.resolve(__dirname, 'fixtures/altium-comments.PcbDoc');
+
+test.describe('altium Texts6 component Comment', () => {
+  const load = async () => {
+    const { parseAltiumPcb } = await import('../src/parsers/altium/altium-pcb-parser');
+    const buf = fs.readFileSync(COMMENT_FIXTURE);
+    return parseAltiumPcb(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+  };
+
+  test('each component carries its Comment as meta.value', async () => {
+    const board = await load();
+    const value = (ref: string) => board.parts.find(p => p.name === ref)?.meta?.value;
+    // Every component in this file has COMMENTON=FALSE: the Comment is hidden
+    // on the silkscreen but still stored, and must still be read.
+    expect(value('U1')).toBe('TPS70933DRV');
+    expect(value('CN1')).toBe('BM23FR0.6-12DP-0.35V');
+    expect(value('R11')).toBe('33KR2F');
+    expect(value('C1')).toBe('SC1U25V2KX');
+    expect(value('U2')).toBe('13156');
+    expect(board.parts.every(p => !!p.meta?.value)).toBe(true);
+    // Package still comes from PATTERN, untouched.
+    expect(board.parts.find(p => p.name === 'U1')?.meta?.package).toBe('DRV0006A');
+  });
+
+  test('parseTexts6 flags exactly one Comment and one Designator per component', async () => {
+    const { openAltiumCfb } = await import('../src/parsers/altium/altium-cfb');
+    const { parseTexts6, parseWideStrings6, parseComponents6 } = await import('../src/parsers/altium/altium-records');
+    const buf = fs.readFileSync(COMMENT_FIXTURE);
+    const cfb = openAltiumCfb(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+    const comps = parseComponents6(cfb.getStream('Components6/Data')!);
+    const texts = parseTexts6(cfb.getStream('Texts6/Data')!, parseWideStrings6(cfb.getStream('WideStrings6/Data')!));
+    for (let ci = 0; ci < comps.length; ci++) {
+      const own = texts.filter(t => t.componentIndex === ci);
+      expect(own.filter(t => t.isComment)).toHaveLength(1);
+      const designators = own.filter(t => t.isDesignator);
+      expect(designators).toHaveLength(1);
+      // The designator text equals SOURCEDESIGNATOR — proves the component
+      // index and the WideStrings lookup line up.
+      expect(designators[0].text).toBe(comps[ci].designator);
+    }
+    // WideStrings entries no longer carry the UTF-16 NUL terminator.
+    expect(texts.some(t => t.text.includes('\0'))).toBe(false);
+  });
+
+  test('unresolved special strings are not shown as a value', async () => {
+    const { altiumCommentValue } = await import('../src/parsers/altium/altium-assembler');
+    expect(altiumCommentValue('.Comment')).toBeUndefined();
+    expect(altiumCommentValue('.Designator')).toBeUndefined();
+    expect(altiumCommentValue('=Value')).toBeUndefined();
+    expect(altiumCommentValue('   ')).toBeUndefined();
+    expect(altiumCommentValue('')).toBeUndefined();
+    expect(altiumCommentValue(' TPS70933DRV ')).toBe('TPS70933DRV');
+    expect(altiumCommentValue('10k 1%')).toBe('10k 1%');
+    // An assignment is not a special string (KiCad's rule).
+    expect(altiumCommentValue('.A=1')).toBe('.A=1');
+  });
+
+  test('ASCII Text records attach a Comment to their component', async () => {
+    const { parseAltiumAscii } = await import('../src/parsers/altium/altium-ascii');
+    const ascii = [
+      'PCB ASCII Version 5.0',
+      '|RECORD=Board|ORIGINX=0|ORIGINY=0|LAYER1NAME=TOP|LAYER32NAME=BOTTOM|',
+      '|RECORD=Net|NAME=GND|',
+      '|RECORD=Component|SOURCEDESIGNATOR=R1|PATTERN=0603|LAYER=TOP|X=100000|Y=200000|ROTATION=0|COMMENTON=FALSE|',
+      '|RECORD=Component|SOURCEDESIGNATOR=R2|PATTERN=0603|LAYER=TOP|X=300000|Y=200000|ROTATION=0|',
+      '|RECORD=Component|SOURCEDESIGNATOR=R3|PATTERN=0603|LAYER=TOP|X=500000|Y=200000|ROTATION=0|',
+      '|RECORD=Pad|NAME=1|COMPONENTINDEX=0|NETINDEX=0|LAYER=TOP|X=100000|Y=200000|XSIZE=10000|YSIZE=10000|TOPSHAPE=1|HOLESIZE=0|ROTATION=0|',
+      // Shape of real exports: WIDESTRING = comma-separated UTF-16 code units.
+      '|RECORD=Text|COMPONENT=0|DESIGNATOR=True|LAYER=TOPOVERLAY|WIDESTRING=82,49|',
+      '|RECORD=Text|COMPONENT=0|COMMENT=True|LAYER=TOPOVERLAY|WIDESTRING=49,48,107|',
+      '|RECORD=Text|COMPONENT=1|COMMENT=TRUE|LAYER=TOPOVERLAY|TEXT=RC0603FR-0722KL|',
+      '|RECORD=Text|COMPONENT=2|COMMENT=TRUE|LAYER=TOPOVERLAY|TEXT=.Comment|',
+      '|RECORD=Text|LAYER=TOPOVERLAY|TEXT=free board text|',
+    ].join('\n');
+    const board = parseAltiumAscii(new TextEncoder().encode(ascii).buffer as ArrayBuffer);
+    expect(board.parts.map(p => p.meta?.value)).toEqual(['10k', 'RC0603FR-0722KL', undefined]);
+  });
+});
+
 test('AltiumPcbFormat appears in the format list with sister extensions', async () => {
   const parsers = await import('../src/parsers');
   const all = parsers.getAllFormats();

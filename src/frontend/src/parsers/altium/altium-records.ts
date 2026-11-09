@@ -27,6 +27,7 @@ import type {
   AArc6,
   AFill6,
   ARegion6,
+  AText6,
   AWideStringTable,
 } from './altium-types';
 import { AltiumStream } from './altium-stream';
@@ -125,9 +126,12 @@ export function parseBoard6(buf: Uint8Array): ABoard6 {
 
 /**
  * WideStrings6/Data — binary string pool. KiCad reads it as a sequence of
- * (uint32 index, uint32 byteLength, utf16le bytes) tuples; layout has minor
- * version drift across Altium releases. We accept a malformed tail by
- * stopping early — the P1 assembler only needs lookup-not-found tolerance.
+ * (uint32 index, uint32 byteLength, utf16le bytes) tuples, where byteLength
+ * counts a trailing UTF-16 NUL and a length ≤ 2 is an empty string. We accept
+ * a malformed tail by stopping early — consumers only need lookup-not-found
+ * tolerance.
+ *
+ * Port from: altium_binary_parser.h :: ReadWideStringTable
  */
 export function parseWideStrings6(buf: Uint8Array): AWideStringTable {
   const s = new AltiumStream(buf);
@@ -138,7 +142,8 @@ export function parseWideStrings6(buf: Uint8Array): AWideStringTable {
     const len = s.readUint32();
     if (len > s.remaining()) break;
     const bytes = s.slice(len);
-    map.set(idx, utf16.decode(bytes));
+    // Drop the NUL terminator the length includes (KiCad: `length - 2`).
+    map.set(idx, len <= 2 ? '' : utf16.decode(bytes.subarray(0, len - 2)));
   }
   return {
     byIndex(idx: number): string {
@@ -288,6 +293,109 @@ export function parsePads6(buf: Uint8Array): APad6[] {
       holeSize,
       rotation,
       isThroughHole: layer === ALTIUM_LAYER.MULTI_LAYER,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Texts6/Data — text primitives. recordType = 5. Only the fields that tie a
+ * component's Comment / Designator string to its component are decoded.
+ *
+ *   uint8  recordType (5 = TEXT)
+ *   --- Subrecord 1 (properties) ---
+ *   uint32 len1
+ *   +0    uint8  layer_v6
+ *   +1    skip 6
+ *   +7    uint16 component        (0xFFFF = free text, not owned by a component)
+ *   +9    skip 4
+ *   +13   int32 x, int32 y
+ *   +21   int32 height
+ *   +25   uint16 stroke font type
+ *   +27   f64   rotation
+ *   +35   uint8 mirrored
+ *   +36   int32 stroke width
+ *   --- present only when len1 >= 123 ---
+ *   +40   uint8 isComment
+ *   +41   uint8 isDesignator
+ *   +42   skip 1
+ *   +43   uint8 font type, uint8 bold, uint8 italic
+ *   +46   64 bytes UTF-16LE font name
+ *   +110  uint8 inverted
+ *   +111  int32 margin border width
+ *   +115  uint32 WideStrings6 index
+ *   (tail: textbox/barcode/frame fields — skipped via len1)
+ *   --- Subrecord 2 ---
+ *   uint32 len2, then a short-pascal latin-1 string (legacy 8-bit copy)
+ *
+ * The text is the WideStrings6 entry when the index resolves, else the legacy
+ * 8-bit string — the same precedence as KiCad. Older records (len1 < 123)
+ * carry neither flag, so they can never be a Comment.
+ *
+ * The Comment string is stored whether or not the component shows it
+ * (Components6 `COMMENTON=FALSE` only hides the silkscreen text), so a
+ * hidden comment is still recovered here.
+ *
+ * Port from: altium_parser_pcb.cpp :: ATEXT6::ATEXT6 and
+ *            altium_pcb.cpp :: ParseTexts6Data (component == ALTIUM_COMPONENT_NONE)
+ */
+export function parseTexts6(buf: Uint8Array, wideStrings: AWideStringTable): AText6[] {
+  const s = new AltiumStream(buf);
+  const out: AText6[] = [];
+  const TEXT_RECORD = 5;
+  const COMPONENT_NONE = 0xFFFF;
+  const latin1 = new TextDecoder('latin1');
+
+  while (s.remaining() >= 5) {
+    const recordType = s.readUint8();
+    if (recordType !== TEXT_RECORD) {
+      log.parser.warn(`Texts6: unexpected record type ${recordType} at pos ${s.pos - 1}, stopping`);
+      break;
+    }
+
+    const len1 = s.readUint32();
+    const sub1Start = s.pos;
+    const sub1End = sub1Start + len1;
+    if (len1 < 13 || sub1End > buf.byteLength) {
+      log.parser.warn(`Texts6: subrecord1 length ${len1} out of bounds at pos ${sub1Start}, stopping`);
+      break;
+    }
+    s.pos = sub1Start + 7;
+    const component = s.readUint16();
+    let isComment = false;
+    let isDesignator = false;
+    let wideIndex = -1;
+    if (len1 >= 123) {
+      s.pos = sub1Start + 40;
+      isComment = s.readUint8() !== 0;
+      isDesignator = s.readUint8() !== 0;
+      s.pos = sub1Start + 115;
+      wideIndex = s.readUint32();
+    }
+    s.pos = sub1End;
+
+    // Subrecord 2 — legacy 8-bit string (uint8 length + bytes).
+    if (s.remaining() < 4) break;
+    const len2 = s.readUint32();
+    const sub2End = s.pos + len2;
+    if (sub2End > buf.byteLength) break;
+    let legacy = '';
+    if (len2 >= 1) {
+      const n = Math.min(s.readUint8(), sub2End - s.pos);
+      legacy = latin1.decode(s.slice(n));
+    }
+    s.pos = sub2End;
+
+    // KiCad: a table hit wins, otherwise the 8-bit copy. byIndex returns ''
+    // both for a miss and for a genuinely empty entry; an empty wide entry
+    // with a non-empty legacy copy does not occur in practice.
+    const wide = wideIndex >= 0 ? wideStrings.byIndex(wideIndex) : '';
+    out.push({
+      componentIndex: component === COMPONENT_NONE ? -1 : component,
+      isComment,
+      isDesignator,
+      text: (wide || legacy).replace(/\r\n/g, '\n'),
     });
   }
 

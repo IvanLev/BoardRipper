@@ -19,6 +19,7 @@ import {
   parseNets6,
   parseClasses6,
   parseWideStrings6,
+  parseTexts6,
 } from './altium-records';
 import { assembleBoardData } from './altium-assembler';
 import type { AltiumPcbDb } from './altium-types';
@@ -44,6 +45,7 @@ export function parseAltiumPcb(buffer: ArrayBuffer): BoardData {
     return b;
   };
   const empty = new Uint8Array();
+  const wideStrings = parseWideStrings6(cfb.getStream('WideStrings6/Data') ?? empty);
   const db: AltiumPcbDb = {
     board: parseBoard6(must('Board6/Data')),
     components: parseComponents6(must('Components6/Data')),
@@ -56,9 +58,10 @@ export function parseAltiumPcb(buffer: ArrayBuffer): BoardData {
       ...parseRegions6(cfb.getStream('Regions6/Data') ?? empty, false),
       ...parseRegions6(cfb.getStream('ShapeBasedRegions6/Data') ?? empty, true),
     ],
+    texts: parseTexts6(cfb.getStream('Texts6/Data') ?? empty, wideStrings),
     nets: parseNets6(must('Nets6/Data')),
     classes: parseClasses6(cfb.getStream('Classes6/Data') ?? empty),
-    wideStrings: parseWideStrings6(cfb.getStream('WideStrings6/Data') ?? empty),
+    wideStrings,
   };
   return assembleBoardData(db);
 }

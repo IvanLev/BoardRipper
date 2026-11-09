@@ -139,7 +139,9 @@ const MAX_PDF_BYTES_TOTAL = 256 * 1024 * 1024;
 // 102: XZZ test points that copy a part pin (same net or no net, inside its
 //     pad) are not emitted; test points read their own reading and are judged
 //     for placeholder pad geometry separately from part pins.
-const PARSER_VERSION = 102;
+// 103: Altium reads each component's Comment (Texts6 isComment record) into
+//     Part.meta.value; WideStrings6 entries lose their trailing NUL.
+const PARSER_VERSION = 103;
 
 interface CachedBoard {
   key: string;

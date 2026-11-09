@@ -42,6 +42,22 @@ export interface APad6 {
   isThroughHole: boolean;
 }
 
+/**
+ * Texts6 record — P1 keeps only what attaches a component's Comment (and
+ * Designator) string to its component. Port of KiCad's ATEXT6
+ * (altium_parser_pcb.h); geometry/font fields are not decoded.
+ */
+export interface AText6 {
+  /** Owning component index into Components6; -1 for a free board text
+   *  (KiCad's ALTIUM_COMPONENT_NONE = 0xFFFF). */
+  componentIndex: number;
+  /** The component's Comment string (KiCad assigns it to the footprint Value). */
+  isComment: boolean;
+  /** The component's Designator string (KiCad: footprint Reference). */
+  isDesignator: boolean;
+  text: string;
+}
+
 export interface ANet6 {
   name: string;
 }
@@ -126,6 +142,7 @@ export interface AltiumPcbDb {
   arcs: AArc6[];
   fills: AFill6[];
   regions: ARegion6[];
+  texts: AText6[];
   nets: ANet6[];
   classes: AClass6[];
   wideStrings: AWideStringTable;

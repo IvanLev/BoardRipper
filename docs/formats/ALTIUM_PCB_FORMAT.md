@@ -28,12 +28,29 @@ The parser produces a standard `BoardData` (parts + pins + nets + outline) from 
 | `Nets6/Data` | Property bag | Net name table (index → name) |
 | `Classes6/Data` | Property bag | Net/component classes |
 | `WideStrings6/Data` | Binary | Unicode string pool |
+| `Texts6/Data` | Binary records | Component Comment → `Part.meta.value` (other texts not drawn) |
 
 Multi-layer copper (`Tracks6`, `Vias6`, `Arcs6`, `Fills6`, `Regions6`, `Polygons6`) is parsed in Phase 2; annotations and mechanical bodies in Phase 3.
 
 ### P1 known limitations
 - Pads with complex shape mode (Altium "PADMODE" != SIMPLE — typical BGA pad stackups) are decoded with `xsize=0, ysize=0` because the size table lives in subrecord 6 (`APAD6_SIZE_AND_SHAPE`) which P1 skips. These render as zero-size points. THT detection (`layer === MULTI_LAYER`) still works for them. Will be addressed in Phase 2.
 - Pad shape mapping collapses to round-or-rect; octagon, roundrect, custom-shape pads land as rect with correct bounding rectangle but lose shape detail. Phase 2 will surface the full `PadShape` enum.
+
+### Component Comment (`Texts6`)
+
+`Components6` has no Comment field — `SOURCELIBREFERENCE` / `SOURCEDESCRIPTION` are library data, not the Comment. The Comment (and the Designator) are ordinary text primitives in `Texts6`, owned by the component through a component index and marked by a flag. Layout per KiCad's `ATEXT6::ATEXT6` (`altium_parser_pcb.cpp`):
+
+| Offset in subrecord 1 | Field |
+|---|---|
+| +0 | `uint8` layer (v6) |
+| +7 | `uint16` component index into `Components6` record order; `0xFFFF` = free board text |
+| +40 | `uint8` isComment (only when subrecord 1 ≥ 123 bytes) |
+| +41 | `uint8` isDesignator (same) |
+| +115 | `uint32` `WideStrings6` index |
+
+Subrecord 2 is a legacy 8-bit short-Pascal copy of the string. The text is the `WideStrings6` entry when the index resolves, else the legacy copy (KiCad's precedence). `WideStrings6` lengths include a 2-byte UTF-16 NUL, which is dropped. The text is stored even when the component hides it (`COMMENTON=FALSE`). KiCad assigns it to the footprint *Value*, so BoardRipper puts it in `Part.meta.value` (Info panel ▸ Value). A text that is an unresolved special string (`.Comment`, `.Designator` — leading `.`, no `=`, KiCad's rule) or a bare `=Parameter` reference is not a value and is dropped.
+
+ASCII: `|RECORD=Text|COMPONENT=<n>|COMMENT=True|…|WIDESTRING=49,48,107|` — `WIDESTRING` is comma-separated UTF-16 code units (`TEXT=` accepted as a fallback).
 
 ## Coordinate system
 
@@ -66,6 +83,8 @@ Pads6 records have 5 subrecords: name (short Pascal), three skipped padding subr
 | [SheetJS/js-cfb](https://github.com/SheetJS/js-cfb) | OLE CFB parser. Used by BoardRipper for the container layer. | Apache-2.0 |
 
 ## Local fixtures
+
+- `src/frontend/tests/fixtures/altium-comments.PcbDoc` — **checked in.** 22-component Altium Designer board whose Comments are real part numbers, minimised by `tests/fixtures/make-altium-fixture.cjs` (parses to the same BoardData as the original).
 
 - `samples/altium/PCB.PcbDoc` — Altium Designer 16.0+ small demo (~915 KB)
 - `samples/altium/ESD_GW1N_4L.PcbDoc` — Altium Designer 15.1+ 4-layer Gowin FPGA dev board (~1.3 MB)
