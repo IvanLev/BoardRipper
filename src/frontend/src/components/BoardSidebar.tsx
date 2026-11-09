@@ -1113,7 +1113,10 @@ function SearchTab({ tabId }: { tabId: number }) {
   // Compute filtered results (show all when no query)
   const ql = query.toLowerCase();
   const matchedParts = useMemo(
-    () => ql ? sortedParts.filter(p => p.name.toLowerCase().includes(ql)) : sortedParts,
+    // Reference or value / part number (meta.value: XZZ, TVW, Altium Comment).
+    () => ql
+      ? sortedParts.filter(p => p.name.toLowerCase().includes(ql) || (p.meta?.value?.toLowerCase().includes(ql) ?? false))
+      : sortedParts,
     [sortedParts, ql],
   );
   const matchedNets = useMemo(
@@ -1238,6 +1241,11 @@ function SearchTab({ tabId }: { tabId: number }) {
                         <span className="net-item-arrow">{isExpanded ? <IconChevronDown size={18} /> : <IconChevronRight size={18} />}</span>
                         <span className="result-name">{part.name}</span>
                         <span className={`badge badge-${part.side}`}>{part.side}</span>
+                        {part.meta?.value && (
+                          <span className="result-value" translate="no" title={part.meta.value} data-testid="search-part-value">
+                            {part.meta.value}
+                          </span>
+                        )}
                         <span className="result-pins">{part.pins.length} pins</span>
                         <button
                           className={`search-pin-btn ${isPinned ? 'pinned' : ''}`}

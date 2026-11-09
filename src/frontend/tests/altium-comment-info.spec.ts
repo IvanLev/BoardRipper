@@ -56,3 +56,15 @@ test('board search finds parts by their Comment', async ({ page }) => {
   // Reference matching is unchanged.
   expect(await results('CN1')).toEqual(['CN1']);
 });
+
+test('Search tab lists each part with its Comment and filters by it', async ({ page }) => {
+  await openBoard(page);
+  await page.locator('[data-board-tab="search"]').click();
+  const row = (ref: string) =>
+    page.locator('.part-item').filter({ has: page.locator('.result-name', { hasText: new RegExp(`^${ref}$`) }) });
+  await expect(row('U1').getByTestId('search-part-value')).toHaveText('TPS70933DRV');
+  await expect(row('CN1').getByTestId('search-part-value')).toHaveText('BM23FR0.6-12DP-0.35V');
+
+  await page.locator('.search-tab-input').fill('121R2F');
+  await expect(page.locator('.part-item .result-name')).toHaveText(['R10', 'R3', 'R4', 'R5', 'R6', 'R9']);
+});
