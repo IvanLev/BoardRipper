@@ -286,6 +286,15 @@ function flipAxisForRotation(rotationDeg: number): 'x' | 'y' {
   return axesSwapped ? 'y' : 'x';
 }
 
+/** The hinge a newly opened board starts with. `verticalAxis` is the board
+ *  axis that gives a top–bottom mirror (flipAxisForRotation, or a parser's
+ *  own hint, which states the same thing); the `bottomFlip` setting picks
+ *  that or the other axis, a left–right mirror. */
+function defaultFlipAxis(verticalAxis: 'x' | 'y'): 'x' | 'y' {
+  if (renderSettingsStore.settings.bottomFlip === 'vertical') return verticalAxis;
+  return verticalAxis === 'x' ? 'y' : 'x';
+}
+
 /** The next multiple of 90° clockwise (+1) or counter-clockwise (−1) of
  *  `deg`; from a multiple itself, the one beyond it. */
 function nextRightAngle(deg: number, dir: 1 | -1): number {
@@ -342,7 +351,7 @@ function syncMirrorsToDerivedFold(tab: BoardTab): void {
   const rotation = computeAutoRotation(derived);
   tab.rotation = rotation;
 
-  tab.flipAxis = flipAxisForRotation(rotation);
+  tab.flipAxis = defaultFlipAxis(flipAxisForRotation(rotation));
 
   tab.mirrorY = false;
   tab.mirrorX = false;
@@ -998,7 +1007,7 @@ class BoardStore extends Emitter {
       rotation: 0,
       mirrorX: false,
       mirrorY: false,
-      flipAxis: 'x',
+      flipAxis: defaultFlipAxis('x'),
       netLineMode: vp.netLineMode,
       connectionHighlight: false,
       dimMode: vp.dimMode,
@@ -1047,8 +1056,7 @@ class BoardStore extends Emitter {
     applyBoardFilters(tab);
     tab.cacheKey = boardCache.makeCacheKey(fileName, fileSize, lastModified);
     tab.rotation = this.autoRotation(cached);
-    tab.flipAxis = flipAxisForRotation(tab.rotation);
-    if (cached.flipAxis) tab.flipAxis = cached.flipAxis;
+    tab.flipAxis = defaultFlipAxis(cached.flipAxis ?? flipAxisForRotation(tab.rotation));
     const cachedFmt = getFormat(cached.format);
     // Initial side = user's perception of "top". For inverted files
     // (primarySide='bottom'), the user's "Top" button is mapped to the
@@ -1067,7 +1075,7 @@ class BoardStore extends Emitter {
     // visible so the side toggle alone gates trace visibility. Butterfly
     // formats (TVW) keep the primary-only default.
     if (cached.layerNames) {
-      tab.layerStates = createLayerStates(cached.layerNames, undefined, !cachedFmt?.hasLayers);
+      tab.layerStates = createLayerStates(cached.layerNames, undefined, !cachedFmt?.hasLayers, renderSettingsStore.settings.routingFollowsSide);
     }
     const vp = loadViewPrefs();
     if (vp.defaultButterfly) {
@@ -1193,8 +1201,7 @@ class BoardStore extends Emitter {
         applyBoardFilters(tab);
         log.perf.log(`post-parse: ${(performance.now() - tPost).toFixed(0)}ms (flagMechanical + derive + filters)`);
         tab.rotation = this.autoRotation(board);
-        tab.flipAxis = flipAxisForRotation(tab.rotation);
-        if (board.flipAxis) tab.flipAxis = board.flipAxis;
+        tab.flipAxis = defaultFlipAxis(board.flipAxis ?? flipAxisForRotation(tab.rotation));
         // Per-file user overrides win over auto-detection — see
         // applySavedViewPrefs for the schema; async so the load path
         // doesn't block on IndexedDB.
@@ -1207,7 +1214,7 @@ class BoardStore extends Emitter {
         // See the cached-path comment above: hasLayers=false formats (Altium)
         // default every layer visible so the side toggle is the only gate.
         if (board.layerNames) {
-          tab.layerStates = createLayerStates(board.layerNames, undefined, !fmt?.hasLayers);
+          tab.layerStates = createLayerStates(board.layerNames, undefined, !fmt?.hasLayers, renderSettingsStore.settings.routingFollowsSide);
         }
         const vp = loadViewPrefs();
         if (vp.defaultButterfly) {
@@ -1361,7 +1368,7 @@ class BoardStore extends Emitter {
       rotation,
       mirrorX: false,
       mirrorY: false,
-      flipAxis: flipAxisForRotation(rotation),
+      flipAxis: defaultFlipAxis(flipAxisForRotation(rotation)),
       netLineMode: vp.netLineMode,
       connectionHighlight: false,
       dimMode: vp.dimMode,

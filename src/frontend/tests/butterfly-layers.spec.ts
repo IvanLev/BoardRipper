@@ -77,7 +77,10 @@ test.describe('butterfly on a layered board', () => {
     const before = await sceneVis(page);
     expect(before.layerNames).toBeGreaterThan(0);        // it IS a layered board
     expect(before.traces).toBeGreaterThan(0);
-    expect(before.traceContainersVisible.every(v => v)).toBe(true);
+    // Some routing shows before (with routingFollowsSide only the viewed
+    // side's layer does — board-side-defaults.spec.ts); Butterfly must put
+    // back exactly this.
+    expect(before.traceContainersVisible.some(v => v)).toBe(true);
     expect(before.showTraces).toBe(true);
 
     await page.getByTestId('butterfly-btn').click();
@@ -99,7 +102,7 @@ test.describe('butterfly on a layered board', () => {
 
     await page.getByTestId('butterfly-btn').click();
     await expect(page.getByTestId('butterfly-btn')).not.toHaveClass(/active/);
-    await expect.poll(async () => (await sceneVis(page)).traceContainersVisible.every(v => v)).toBe(true);
+    await expect.poll(async () => (await sceneVis(page)).traceContainersVisible).toEqual(before.traceContainersVisible);
     const off = await sceneVis(page);
     expect(off.viaVisible).toBe(before.viaVisible);      // back to the user's own via toggle (off by default)
     if (before.silkBottomParent !== 'none') expect(off.silkBottomParent).toBe('silk');

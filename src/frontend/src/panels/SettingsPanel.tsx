@@ -1442,6 +1442,33 @@ function LightSelectionStyleRow({ value, onUpdate }: { value: LightSelectionStyl
   );
 }
 
+const BOTTOM_FLIP_OPTIONS: { id: 'horizontal' | 'vertical'; label: string; title: string }[] = [
+  { id: 'horizontal', label: 'Left–right', title: 'Turn the board over like a page: the bottom view is mirrored left to right' },
+  { id: 'vertical', label: 'Top–bottom', title: 'Turn the board over top to bottom: the bottom view is mirrored up and down' },
+];
+
+function BottomFlipRow({ value, onUpdate }: { value: 'horizontal' | 'vertical'; onUpdate: DraftUpdater }) {
+  useEffect(() => { recordRenderedField('bottomFlip'); }, []);
+  const { hidden, matched } = useFieldSearchState('bottomFlip');
+  if (hidden) return null;
+  return (
+    <div className={`settings-row${matched ? ' settings-search-match' : ''}`}
+      title="How the board turns over when you switch to the bottom side. Applies to boards opened from now on; the ⋯ menu's flip-axis item still changes it for one board.">
+      <label className="settings-label">Bottom side flip</label>
+      <div className="settings-btn-group">
+        {BOTTOM_FLIP_OPTIONS.map(o => (
+          <button key={o.id} type="button" title={o.title}
+            className={`settings-btn-option${value === o.id ? ' active' : ''}`}
+            data-testid={`settings-bottom-flip-${o.id}`}
+            onClick={() => onUpdate({ bottomFlip: o.id })}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ---- PDF render mode selector ----
 
 const RENDER_MODE_LABELS: Record<'auto' | 'standard' | 'always-tile', string> = {
@@ -2283,6 +2310,10 @@ export function SettingsPanel() {
           title="While rotation is locked, two fingers must turn this far before it unlocks. Every pinch turns a little; too low and zooming starts rotating, too high and unlocking takes a deliberate twist. Default 24°." />
         <Slider label="Rotation snap window" value={draft.rotateSnapDeg} min={0} max={45} step={1} field="rotateSnapDeg" onUpdate={updateGlobal} unit="°"
           title="When the fingers lift within this many degrees of 0°, 90°, 180° or 270°, the board snaps to that right angle. 0 never snaps. Default 10°." />
+        <div className="settings-subsection-label">Board side</div>
+        <BottomFlipRow value={draft.bottomFlip} onUpdate={updateGlobal} />
+        <Toggle label="Routing follows the side" value={draft.routingFollowsSide} field="routingFollowsSide" onUpdate={updateGlobal}
+          title="On layered boards (Altium, KiCad, EAGLE, Allegro), show only the traces and pours of the side you are viewing: top layer on Top, bottom layer on Bottom. Inner layers start hidden; switch them on in the Layers tab. Off: every layer's routing shows on both sides." />
         <div className="settings-subsection-label">Click</div>
         <Slider label="Pin Click Radius" value={draft.clickThreshold} min={5} max={100} step={5} field="clickThreshold" onUpdate={updateGlobal}
           title="Maximum distance (screen pixels) from a pin center that counts as a click on that pin. Larger = easier to click small or densely packed pins" />

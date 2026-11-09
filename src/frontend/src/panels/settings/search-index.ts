@@ -163,6 +163,8 @@ export const SETTINGS_INDEX: IndexEntry[] = [
   F('input', 'navigation', 'navTargetSize', 'Component Size', 'Target on-screen size of a component after navigating to it from search / NetList / Worklist. Expressed as a fraction of the smaller viewport dimension. Default 0.25 (~25%).', ['navigate to', 'zoom on click']),
   F('input', 'navigation', 'navZoomMode', 'Zoom Mode', 'How navigation should treat zoom level: Auto / Keep / Always.', ['auto keep always', 'navigation zoom']),
   F('input', 'navigation', 'disableInertia', 'Inertia', 'Continue panning with momentum after releasing a drag gesture.', ['momentum', 'glide']),
+  F('input', 'navigation', 'bottomFlip', 'Bottom side flip', 'How the board turns over when the bottom side is shown: left–right (like a page, default) or top–bottom. Applies to boards opened from now on', ['mirror', 'flip axis', 'horizontal', 'vertical']),
+  F('input', 'navigation', 'routingFollowsSide', 'Routing follows the side', 'On layered boards show only the traces and pours of the side being viewed; inner layers start hidden', ['traces', 'layers', 'inner', 'copper']),
   F('input', 'navigation', 'clickThreshold', 'Pin Click Radius', 'Maximum distance (screen pixels) from a pin center that counts as a click on that pin. Larger = easier to click small or densely packed pins'),
 
   // Shortcuts

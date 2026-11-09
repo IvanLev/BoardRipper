@@ -67,6 +67,7 @@ export function viewsOverlap(a: BoardCamera, b: BoardCamera, sw: number, sh: num
   return areaB > 0 && (ix * iy) / areaB >= 0.3;
 }
 import { getFormat } from '../parsers/registry';
+import { outerCopperLayers } from '../store/layer-store';
 import { log } from '../store/log-store';
 import { ensurePdfPanel } from '../store/dockview-api';
 import { fileInputRefs } from '../store/file-inputs';
@@ -3031,8 +3032,26 @@ export class BoardRenderer {
     return getFormat(board.format)?.flipY ?? false;
   }
 
-  /** Apply per-layer trace, via, and component sub-layer visibility */
-  private applyLayerVisibility(scene: BoardScene) {
+  /** Whether the side being viewed lets layer `i`'s routing show
+   *  (renderSettings.routingFollowsSide): the top copper layer only while the
+   *  top side is shown, the bottom one only while the bottom is. Inner layers
+   *  and everything else are left to their own Layers-tab toggle. Formats with
+   *  layer-by-layer navigation (TVW, `hasLayers`) already show one layer at a
+   *  time and are not affected. */
+  private layerShownBySide(i: number, board: BoardData | null = this.board): boolean {
+    if (!renderSettingsStore.settings.routingFollowsSide || !board) return true;
+    const names = board.layerNames;
+    if (!names || names.length < 2 || getFormat(board.format)?.hasLayers) return true;
+    const { top, bottom } = outerCopperLayers(names);
+    if (i === top) return this.isTopVisible;
+    if (i === bottom) return this.isBottomVisible;
+    return true;
+  }
+
+  /** Apply per-layer trace, via, and component sub-layer visibility.
+   *  `board` is passed by activateScene, which runs before `this.board` is
+   *  assigned to the board being activated. */
+  private applyLayerVisibility(scene: BoardScene, board: BoardData | null = this.board) {
     const { layerStates, showVias, showSilkscreen, showPads, showCopperDrops, showComponents, showPins, showOutlines, showLabels, showTop, showBottom } = boardStore;
     // Butterfly draws the two sides flat and apart; traces, vias and pours
     // belong to the board as a whole (inner layers to neither side), so they
@@ -3052,7 +3071,7 @@ export class BoardRenderer {
       const c = scene.traceLayerContainers[i];
       if (!c) continue;
       const stateVisible = i < layerStates.length ? layerStates[i].visible : true;
-      c.visible = showTraces && (stateVisible || i === selectedLayerIndex);
+      c.visible = showTraces && (stateVisible || i === selectedLayerIndex) && this.layerShownBySide(i, board);
     }
     // Layer emphasis: bump one layer's traces to the top and dim the rest.
     // A pinned layer wins outright (it's kept visible); otherwise the selected
@@ -3080,7 +3099,7 @@ export class BoardRenderer {
       const c = scene.surfacesLayerContainers[i];
       if (!c) continue;
       const stateVisible = i < layerStates.length ? layerStates[i].visible : true;
-      c.visible = showSurfaces && (stateVisible || i === selectedLayerIndex);
+      c.visible = showSurfaces && (stateVisible || i === selectedLayerIndex) && this.layerShownBySide(i, board);
     }
     // Via overlay
     if (scene.viaLayer) scene.viaLayer.visible = showVias && copper;
@@ -3543,7 +3562,7 @@ export class BoardRenderer {
       log.render.log('activateScene: same scene, updating flips');
       scene.topLayer.visible = this.isTopVisible;
       scene.bottomLayer.visible = this.isBottomVisible;
-      this.applyLayerVisibility(scene);
+      this.applyLayerVisibility(scene, board);
       this.applyFlips(board, scene);
       this.needsRender = true;
       this.overlayDirty = true;   // flips changed the label-layer transforms
@@ -3653,7 +3672,7 @@ export class BoardRenderer {
 
     scene.topLayer.visible = this.isTopVisible;
     scene.bottomLayer.visible = this.isBottomVisible;
-    this.applyLayerVisibility(scene);
+    this.applyLayerVisibility(scene, board);
     this.applyFlips(board, scene);
 
     // Restore viewport position or fit
@@ -5123,6 +5142,9 @@ export class BoardRenderer {
         // destroyed Graphics in the tree (the `_gpuData of null` crash).
         'overlayLayout', 'overlayPosition', 'overlayOrientation', 'overlayFloatX', 'overlayFloatY',
         'minimapOnPan',
+        // Read when a board opens (bottomFlip) or by applyLayerVisibility
+        // (routingFollowsSide, re-applied in the fast path below).
+        'bottomFlip', 'routingFollowsSide',
       ]);
       if (prev) {
         let visualChanged = false;
@@ -5140,6 +5162,10 @@ export class BoardRenderer {
         }
         if (!visualChanged) {
           this.applyViewportPlugins();
+          if (this.activeScene && cur.routingFollowsSide !== prev.routingFollowsSide) {
+            this.applyLayerVisibility(this.activeScene);
+            this.needsRender = true;
+          }
           // Overlay-only keys (e.g. selectedLabelMinPx) still need a repaint —
           // the overlay reads thresholds at draw time, so no rebuild required.
           this.overlayDirty = true;
@@ -7395,6 +7421,7 @@ export class BoardRenderer {
       const t = this.board.traces[i];
       // Skip traces on hidden layers
       if (t.layer != null && t.layer < layerStates.length && !layerStates[t.layer].visible) continue;
+      if (t.layer != null && !this.layerShownBySide(t.layer)) continue;
 
       const halfW = (t.width || 1) / 2;
       const threshold = halfW + pointerTol;

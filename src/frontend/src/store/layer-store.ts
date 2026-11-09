@@ -61,7 +61,19 @@ export function createLayerStates(
   layerNames: string[],
   primarySide?: 'top' | 'bottom',
   allVisible = false,
+  innerHidden = false,
 ): LayerState[] {
+  if (allVisible && innerHidden) {
+    // Routing follows the side (renderSettings.routingFollowsSide): the two
+    // outer layers stay on — the side switch decides which one shows — and
+    // the inner layers start off.
+    const { top, bottom } = outerCopperLayers(layerNames);
+    return layerNames.map((name, i) => ({
+      visible: i === top || i === bottom,
+      color: defaultLayerColor(name, i),
+      name,
+    }));
+  }
   // Find the index of the primary layer
   const side = primarySide ?? 'top';
   const primaryIdx = side === 'bottom'
@@ -83,4 +95,22 @@ export function colorToHex(color: number): string {
 /** Convert a CSS hex string (#RRGGBB) to hex number (0xRRGGBB) */
 export function hexToColor(hex: string): number {
   return parseInt(hex.replace('#', ''), 16);
+}
+
+/** Indices of the outer copper layers in a board's layer list: the top one
+ *  is the first named Top / Front / F.Cu, the bottom one the last named
+ *  Bottom / Bot / Back / B.Cu; failing a name, the first and the last layer
+ *  (every parser lists copper top-to-bottom). `top === bottom` only for a
+ *  single-layer list. */
+export function outerCopperLayers(layerNames: readonly string[]): { top: number; bottom: number } {
+  const n = layerNames.length;
+  if (n === 0) return { top: -1, bottom: -1 };
+  const isTop = (s: string) => /^(TOP|FRONT|F\.CU)\b|\bTOP\b/i.test(s.trim());
+  const isBottom = (s: string) => /^(BOTTOM|BOT|BACK|B\.CU)\b|\bBOTTOM\b/i.test(s.trim());
+  let top = layerNames.findIndex(isTop);
+  let bottom = -1;
+  for (let i = n - 1; i >= 0; i--) if (isBottom(layerNames[i])) { bottom = i; break; }
+  if (top < 0) top = 0;
+  if (bottom < 0 || bottom === top) bottom = n - 1;
+  return { top, bottom };
 }

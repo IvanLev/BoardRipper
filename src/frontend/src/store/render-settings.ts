@@ -415,6 +415,18 @@ export interface RenderSettings {
    *  `ROTATE_SNAP_DEG`, otherwise kept as is ("unlocked"). A dead zone keeps
    *  an ordinary pinch-zoom from wobbling. Off = pinch only. */
   twoFingerRotate: boolean;
+  /** How the board turns over when the bottom side is shown: 'horizontal'
+   *  mirrors it left–right (the hinge is the screen's vertical axis, like
+   *  turning a page), 'vertical' top–bottom. Applied when a board is opened;
+   *  the transform menu's flip-axis item still swaps it per board, and a
+   *  board's saved view prefs win. */
+  bottomFlip: 'horizontal' | 'vertical';
+  /** On boards with copper layers but no layer-by-layer navigation (Altium,
+   *  KiCad, EAGLE, Allegro), show only the routing of the side being viewed:
+   *  Top → top-layer traces and pours, Bottom → bottom-layer ones. Inner
+   *  layers start hidden and are switched on in the Layers tab. Off: every
+   *  layer's routing shows on both sides, as before. */
+  routingFollowsSide: boolean;
   /** While rotation is locked, the fingers must turn this many degrees
    *  before it unlocks (every pinch turns a little). */
   rotateUnlockDeg: number;
@@ -770,6 +782,8 @@ export const DEFAULTS: RenderSettings = {
   smoothZoom: true,
   twoFingerPan: true,
   twoFingerRotate: true,
+  bottomFlip: 'horizontal',
+  routingFollowsSide: true,
   rotateUnlockDeg: 24,   // was 12 — zooming pinches unlocked too easily (iPad, 2026-10-07)
   rotateSnapDeg: 10,
   wheelShiftAction: 'pan',
