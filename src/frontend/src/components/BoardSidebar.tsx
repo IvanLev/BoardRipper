@@ -22,6 +22,10 @@ import { boardKnowledge } from '../store/board-knowledge';
 import { bomReasonLabel, type BoardData, type Part } from '../parsers';
 import { pinDisplayId } from '../parsers/types';
 import { setActiveSearchInput, getActiveSearchInput } from './BoardSidebar.utils';
+import {
+  sortParts, groupParts, loadPartListOrder, savePartListOrder,
+  PART_SORT_LABELS, PART_GROUP_LABELS, type PartSortKey, type PartGroupKey,
+} from '../store/part-list-order';
 
 type SidebarTab = 'layers' | 'info' | 'search' | 'revisions' | 'worklist' | 'notes';
 
@@ -1052,6 +1056,21 @@ function SearchTab({ tabId }: { tabId: number }) {
     if (storeQuery !== query) setQuery(storeQuery);
   }
   const [componentsOpen, setComponentsOpen] = useState(true);
+  // Component list order: sort key + optional grouping, remembered per viewer.
+  const [partOrder, setPartOrder] = useState(loadPartListOrder);
+  const updatePartOrder = (patch: Partial<{ sort: PartSortKey; group: PartGroupKey }>) => {
+    const next = { ...partOrder, ...patch };
+    setPartOrder(next);
+    savePartListOrder(next.sort, next.group);
+  };
+  // Folded group headers, keyed `${groupBy}:${groupKey}` so switching the
+  // grouping starts with everything open.
+  const [foldedGroups, setFoldedGroups] = useState<Set<string>>(() => new Set());
+  const toggleGroup = (id: string) => setFoldedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [netsOpen, setNetsOpen] = useState(true);
   // Which part name (if any) has its net sublist expanded. Decoupled from
   // boardStore.selection so clicking a net *inside* the sublist (which clears
@@ -1128,7 +1147,12 @@ function SearchTab({ tabId }: { tabId: number }) {
   // unvirtualized janks every keystroke; cap the DOM and show an overflow
   // hint instead. Refine the query to narrow.
   const RESULT_CAP = 400;
-  const shownParts = matchedParts.length > RESULT_CAP ? matchedParts.slice(0, RESULT_CAP) : matchedParts;
+  const orderedParts = useMemo(() => sortParts(matchedParts, partOrder.sort), [matchedParts, partOrder.sort]);
+  const partGroups = useMemo(
+    () => partOrder.group === 'none' ? null : groupParts(matchedParts, partOrder.group, partOrder.sort),
+    [matchedParts, partOrder.group, partOrder.sort],
+  );
+  const shownParts = orderedParts.length > RESULT_CAP ? orderedParts.slice(0, RESULT_CAP) : orderedParts;
   const shownNets = matchedNets.length > RESULT_CAP ? matchedNets.slice(0, RESULT_CAP) : matchedNets;
 
   // Autocomplete suggestions (max 8). With the field empty, the last eight
@@ -1181,6 +1205,43 @@ function SearchTab({ tabId }: { tabId: number }) {
 
   if (!board) return <div className="panel-empty">No board loaded</div>;
 
+  const renderPartRow = (part: Part) => {
+    const isExpanded = expandedPart === part.name;
+    const isPinned = pinnedRefdes.has(part.name);
+    return (
+      <div key={part.name} className={isExpanded ? 'search-spoiler-open' : ''}>
+        <div
+          className={`part-item ${isExpanded ? 'net-highlighted' : ''}`}
+          onClick={() => {
+            setExpandedPart(isExpanded ? null : part.name);
+            boardStore.focusPart(part.name);
+          }}
+        >
+          <span className="net-item-arrow">{isExpanded ? <IconChevronDown size={18} /> : <IconChevronRight size={18} />}</span>
+          <span className="result-name">{part.name}</span>
+          <span className={`badge badge-${part.side}`}>{part.side}</span>
+          {part.meta?.value && (
+            <span className="result-value" translate="no" title={part.meta.value} data-testid="search-part-value">
+              {part.meta.value}
+            </span>
+          )}
+          <span className="result-pins">{part.pins.length} pins</span>
+          <button
+            className={`search-pin-btn ${isPinned ? 'pinned' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              worklistStore.pushRefdesToActive(part.name);
+            }}
+            title={isPinned ? 'Already in the active worklist' : 'Add to current worklist'}
+          >
+            {isPinned ? <IconPinFilled size={14} /> : <IconPin size={14} />}
+          </button>
+        </div>
+        {isExpanded && <PartNetsSublist part={part} />}
+      </div>
+    );
+  };
+
   const totalResults = matchedParts.length + matchedNets.length;
 
   return (
@@ -1225,43 +1286,56 @@ function SearchTab({ tabId }: { tabId: number }) {
             </button>
             {componentsOpen && (
               <div className="search-section-body">
+                <div className="part-list-controls">
+                  <label>
+                    <span>Sort</span>
+                    <select
+                      data-testid="part-sort-select"
+                      value={partOrder.sort}
+                      onChange={e => updatePartOrder({ sort: e.target.value as PartSortKey })}
+                    >
+                      {(Object.keys(PART_SORT_LABELS) as PartSortKey[]).map(k => (
+                        <option key={k} value={k}>{PART_SORT_LABELS[k]}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Group</span>
+                    <select
+                      data-testid="part-group-select"
+                      value={partOrder.group}
+                      onChange={e => updatePartOrder({ group: e.target.value as PartGroupKey })}
+                    >
+                      {(Object.keys(PART_GROUP_LABELS) as PartGroupKey[]).map(k => (
+                        <option key={k} value={k}>{PART_GROUP_LABELS[k]}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 {matchedParts.length === 0 && <div className="search-section-empty">No matching components</div>}
-                {shownParts.map((part) => {
-                  const isExpanded = expandedPart === part.name;
-                  const isPinned = pinnedRefdes.has(part.name);
-                  return (
-                    <div key={part.name} className={isExpanded ? 'search-spoiler-open' : ''}>
-                      <div
-                        className={`part-item ${isExpanded ? 'net-highlighted' : ''}`}
-                        onClick={() => {
-                          setExpandedPart(isExpanded ? null : part.name);
-                          boardStore.focusPart(part.name);
-                        }}
-                      >
-                        <span className="net-item-arrow">{isExpanded ? <IconChevronDown size={18} /> : <IconChevronRight size={18} />}</span>
-                        <span className="result-name">{part.name}</span>
-                        <span className={`badge badge-${part.side}`}>{part.side}</span>
-                        {part.meta?.value && (
-                          <span className="result-value" translate="no" title={part.meta.value} data-testid="search-part-value">
-                            {part.meta.value}
-                          </span>
-                        )}
-                        <span className="result-pins">{part.pins.length} pins</span>
-                        <button
-                          className={`search-pin-btn ${isPinned ? 'pinned' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            worklistStore.pushRefdesToActive(part.name);
-                          }}
-                          title={isPinned ? 'Already in the active worklist' : 'Add to current worklist'}
-                        >
-                          {isPinned ? <IconPinFilled size={14} /> : <IconPin size={14} />}
-                        </button>
-                      </div>
-                      {isExpanded && <PartNetsSublist part={part} />}
-                    </div>
-                  );
-                })}
+                {partGroups
+                  ? (() => {
+                      // Same render cap as the flat list, counted in rows.
+                      let budget = RESULT_CAP;
+                      return partGroups.map(g => {
+                        const id = `${partOrder.group}:${g.key}`;
+                        const folded = foldedGroups.has(id);
+                        const rows = folded ? [] : g.parts.slice(0, Math.max(0, budget));
+                        budget -= rows.length;
+                        if (!folded && rows.length === 0) return null;
+                        return (
+                          <div key={id} className="part-group" data-testid="part-group">
+                            <button className="part-group-header" onClick={() => toggleGroup(id)} aria-expanded={!folded}>
+                              <span className="search-section-arrow">{folded ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}</span>
+                              <span className="part-group-label" translate="no" title={g.label}>{g.label}</span>
+                              <span className="search-section-count" data-testid="part-group-count">{g.parts.length}</span>
+                            </button>
+                            {rows.map(renderPartRow)}
+                          </div>
+                        );
+                      });
+                    })()
+                  : shownParts.map(renderPartRow)}
                 {matchedParts.length > shownParts.length && (
                   <div className="search-section-overflow">
                     Showing {shownParts.length} of {matchedParts.length} — refine the search to narrow.

@@ -66,5 +66,35 @@ test('Search tab lists each part with its Comment and filters by it', async ({ p
   await expect(row('CN1').getByTestId('search-part-value')).toHaveText('BM23FR0.6-12DP-0.35V');
 
   await page.locator('.search-tab-input').fill('121R2F');
-  await expect(page.locator('.part-item .result-name')).toHaveText(['R10', 'R3', 'R4', 'R5', 'R6', 'R9']);
+  await expect(page.locator('.part-item .result-name')).toHaveText(['R3', 'R4', 'R5', 'R6', 'R9', 'R10']);
+});
+
+test('Search tab sorts and groups the component list', async ({ page }) => {
+  await openBoard(page);
+  await page.locator('[data-board-tab="search"]').click();
+  const names = () => page.locator('.part-item .result-name').allTextContents();
+
+  // Default reference order is natural: R2 before R10.
+  const ref = await names();
+  expect(ref.indexOf('R2')).toBeLessThan(ref.indexOf('R10'));
+
+  await page.getByTestId('part-sort-select').selectOption('pins');
+  expect((await names()).slice(0, 3)).toEqual(['U2', 'CN1', 'U1']);
+
+  await page.getByTestId('part-group-select').selectOption('value');
+  const group = (label: string) => page.getByTestId('part-group')
+    .filter({ has: page.locator('.part-group-label', { hasText: new RegExp(`^${label.replace(/[.()]/g, '\\$&')}$`) }) });
+  await expect(group('121R2F').getByTestId('part-group-count')).toHaveText('6');
+  await expect(group('SC1U25V2KX').locator('.result-name')).toHaveText(['C1', 'C2', 'C3', 'C4', 'C5']);
+
+  // Folding a group hides its rows only.
+  await group('121R2F').locator('.part-group-header').click();
+  await expect(group('121R2F').locator('.part-item')).toHaveCount(0);
+  await expect(group('0R2J').locator('.part-item')).toHaveCount(4);
+
+  // The choice is remembered for the next visit.
+  expect(await page.evaluate(() => [
+    localStorage.getItem('boardripper-part-list-sort'),
+    localStorage.getItem('boardripper-part-list-group'),
+  ])).toEqual(['pins', 'value']);
 });
