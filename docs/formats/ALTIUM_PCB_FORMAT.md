@@ -36,6 +36,10 @@ Multi-layer copper (`Tracks6`, `Vias6`, `Arcs6`, `Fills6`, `Regions6`, `Polygons
 - Pads with complex shape mode (Altium "PADMODE" != SIMPLE — typical BGA pad stackups) are decoded with `xsize=0, ysize=0` because the size table lives in subrecord 6 (`APAD6_SIZE_AND_SHAPE`) which P1 skips. These render as zero-size points. THT detection (`layer === MULTI_LAYER`) still works for them. Will be addressed in Phase 2.
 - Pad shape mapping collapses to round-or-rect; octagon, roundrect, custom-shape pads land as rect with correct bounding rectangle but lose shape detail. Phase 2 will surface the full `PadShape` enum.
 
+### Region vertex encoding (`Regions6` vs `ShapeBasedRegions6`)
+
+The vertex encoding is decided by the **stream**, never by the record (KiCad: `AREGION6(reader, false)` for `Regions6`, `AREGION6(reader, true)` for `ShapeBasedRegions6`). `Regions6` vertices are plain `f64 x, f64 y` (16 bytes). `ShapeBasedRegions6` vertices are extended (`u8 isRound`, `i32` × 4 position + centre, `i32` radius, `f64` × 2 angles = 37 bytes), with one extra closing vertex. A `Regions6` record with `ISSHAPEBASED=TRUE` or `KIND=1` still uses plain vertices. Reading those as extended overran the record, and the exception failed the whole file. A board cutout is `KIND=0` + `ISBOARDCUTOUT=TRUE`. A region whose vertex count does not fit its record is skipped with a warning, and each optional geometry stream is decoded behind a guard: a stream that throws costs that layer, not the board.
+
 ### Pads on non-copper layers
 
 A pad primitive may sit on any layer. Only pads on a copper layer (Top … Bottom), an internal plane (39–54) or Multi-Layer (74) are pins; one on paste, solder mask, overlay or a mechanical layer is a drawing and is dropped from pins and copper pads (`isAltiumPadCopperLayer`). This is KiCad's rule (`ConvertPads6ToFootprintItem` → `…OnNonCopper` imports them as graphics). Typical cases: a thermal pad whose paste is split into several `SOLDERPASTE` pads on the paste layer, and footprints that repeat a pin number on a netless paste-layer pad.

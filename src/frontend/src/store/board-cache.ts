@@ -143,7 +143,10 @@ const MAX_PDF_BYTES_TOTAL = 256 * 1024 * 1024;
 //     Part.meta.value; WideStrings6 entries lose their trailing NUL.
 // 104: Altium pads on non-copper layers (paste, mask, overlay — e.g. a split
 //     thermal pad's SOLDERPASTE pads) are no longer pins or copper pads.
-const PARSER_VERSION = 104;
+// 105: Altium Regions6 vertex encoding is per stream, as in KiCad (cutout and
+//     shape-based records in Regions6 were misread and failed the file), and
+//     ISBOARDCUTOUT regions are no longer drawn as copper.
+const PARSER_VERSION = 105;
 
 interface CachedBoard {
   key: string;

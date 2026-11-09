@@ -612,6 +612,56 @@ test.describe('altium non-copper pads', () => {
   });
 });
 
+test.describe('altium Regions6 vertex encoding', () => {
+  /** One Regions6 record (type 11) with plain f64 vertices, as Altium writes
+   *  every record of that stream. */
+  function regionRecord(props: string, verts: [number, number][]): Uint8Array {
+    const propBytes = new TextEncoder().encode(props + '\0');
+    const bodyLen = 18 + 4 + propBytes.length + 4 + verts.length * 16;
+    const buf = new Uint8Array(5 + bodyLen);
+    const dv = new DataView(buf.buffer);
+    buf[0] = 11;
+    dv.setUint32(1, bodyLen, true);
+    let p = 5;
+    buf[p] = 1;                        // layer TOP
+    dv.setInt16(p + 3, 0, true);       // net
+    dv.setUint16(p + 5, 0xFFFF, true); // polygon
+    dv.setUint16(p + 7, 0xFFFF, true); // component
+    dv.setUint16(p + 14, 0, true);     // holecount
+    p += 18;
+    dv.setUint32(p, propBytes.length, true); p += 4;
+    buf.set(propBytes, p); p += propBytes.length;
+    dv.setUint32(p, verts.length, true); p += 4;
+    for (const [x, y] of verts) { dv.setFloat64(p, x, true); dv.setFloat64(p + 8, y, true); p += 16; }
+    return buf;
+  }
+  const square: [number, number][] = [[0, 0], [100000, 0], [100000, 100000], [0, 100000]];
+
+  test('cutout and shape-based records in Regions6 keep plain vertices (KiCad: per stream)', async () => {
+    const { parseRegions6 } = await import('../src/parsers/altium/altium-records');
+    // These two used to be read as extended (37-byte) vertices, overran the
+    // record and threw — which failed the whole board (Shuriken_PDB.PcbDoc).
+    const stream = new Uint8Array([
+      ...regionRecord('|KIND=1|ISSHAPEBASED=FALSE|', square),
+      ...regionRecord('|KIND=0|ISSHAPEBASED=TRUE|', square),
+      ...regionRecord('|KIND=0|ISBOARDCUTOUT=TRUE|', square),
+    ]);
+    const regions = parseRegions6(stream, false);
+    expect(regions).toHaveLength(3);
+    for (const r of regions) expect(r.vertices).toEqual(square.map(([x, y]) => ({ x, y })));
+    expect(regions.map(r => r.kind)).toEqual([1, 0, 5]); // board cutout → internal 5 (skipped as copper)
+  });
+
+  test('a region whose vertices do not fit its record is skipped, not fatal', async () => {
+    const { parseRegions6 } = await import('../src/parsers/altium/altium-records');
+    const good = regionRecord('|KIND=0|', square);
+    const bad = regionRecord('|KIND=0|', square);
+    new DataView(bad.buffer).setUint32(bad.length - 4 * 16 - 4, 999, true); // claims 999 vertices
+    const regions = parseRegions6(new Uint8Array([...bad, ...good]), false);
+    expect(regions).toHaveLength(1);
+  });
+});
+
 test('AltiumPcbFormat appears in the format list with sister extensions', async () => {
   const parsers = await import('../src/parsers');
   const all = parsers.getAllFormats();

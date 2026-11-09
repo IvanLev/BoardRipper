@@ -518,9 +518,13 @@ export function parseFills6(buf: Uint8Array): AFill6[] {
 
 /**
  * Regions6/Data (and ShapeBasedRegions6/Data) — copper-pour polygons.
- * recordType = 11. KiCad ParseRegions6Data; covers both regular and shape-
- * based regions in a single decoder (the latter just has ISSHAPEBASED=TRUE
- * in the embedded property bag and uses per-vertex extended encoding).
+ * recordType = 11. KiCad ParseRegions6Data / ParseShapeBasedRegions6Data;
+ * one decoder for both. The vertex encoding is a property of the **stream**,
+ * never of the record: KiCad constructs AREGION6(reader, false) for Regions6
+ * and AREGION6(reader, true) for ShapeBasedRegions6. A Regions6 record with
+ * ISSHAPEBASED=TRUE or KIND=1 (polygon cutout) still has plain f64 vertices —
+ * reading those as extended overran the record and threw, which failed the
+ * whole file (Shuriken_PDB.PcbDoc: 4 cutouts + 2 shape-based in Regions6).
  *
  * Layout (after the type byte + subrecord length):
  *   u8  layer
@@ -533,7 +537,7 @@ export function parseFills6(buf: Uint8Array): AFill6[] {
  *   skip 2
  *   ReadProperties() — KEY=VALUE| text with ISSHAPEBASED, KIND, etc.
  *   u32 num_outline_vertices
- *   (extended-vertex layout iff isShapeBased || kind ∈ {BOARD_CUTOUT, POLYGON_CUTOUT})
+ *   (extended-vertex layout iff the stream is ShapeBasedRegions6)
  *     per vertex: u8 isRound + i32×4 (pos.x, pos.y, center.x, center.y) + i32 radius + f64×2 angles
  *     (vertex count is bumped by 1 in this branch — closing vertex included)
  *   else:
@@ -541,9 +545,10 @@ export function parseFills6(buf: Uint8Array): AFill6[] {
  *   then `holecount` hole loops:
  *     u32 num_hole_vertices, per vertex f64 x + f64 y
  */
-export function parseRegions6(buf: Uint8Array, forceExtended = false): ARegion6[] {
+export function parseRegions6(buf: Uint8Array, extended = false): ARegion6[] {
   const out: ARegion6[] = [];
-  for (const { body } of iterateSingleSubrecord(buf, 11)) {
+  for (const { body, bodyLen } of iterateSingleSubrecord(buf, 11)) {
+    if (bodyLen < 22) continue; // fixed header + prop-bag length
     const layer = body.readUint8();
     body.skip(2); // flags1, flags2
     const netIndex = body.readInt16();
@@ -562,21 +567,23 @@ export function parseRegions6(buf: Uint8Array, forceExtended = false): ARegion6[
     const propBytes = body.slice(propLen);
     const propText = new TextDecoder('utf-8', { fatal: false }).decode(propBytes).replace(/\0+$/, '');
     const props = parsePropBagText(propText);
-    const kind = readPropInt(props, 'KIND', 0);
-    const isShapeBased = readPropBool(props, 'ISSHAPEBASED', false);
+    // KIND 1 = polygon cutout; a board cutout is KIND 0 + ISBOARDCUTOUT=TRUE
+    // (KiCad), mapped here to the internal 5 the assembler already skips.
     const REGION_KIND_BOARD_CUTOUT = 5;
-    const REGION_KIND_POLYGON_CUTOUT = 1;
-    const extended = forceExtended
-      || isShapeBased
-      || kind === REGION_KIND_BOARD_CUTOUT
-      || kind === REGION_KIND_POLYGON_CUTOUT;
+    const kind = readPropBool(props, 'ISBOARDCUTOUT', false) ? REGION_KIND_BOARD_CUTOUT : readPropInt(props, 'KIND', 0);
+    const isShapeBased = readPropBool(props, 'ISSHAPEBASED', false);
 
+    if (body.remaining() < 4) continue;
     let numOutline = body.readUint32();
     if (extended) numOutline += 1; // closing vertex
+    const VERTEX_BYTES = extended ? 1 + 4 * 5 + 8 * 2 : 16;
+    if (numOutline * VERTEX_BYTES > body.remaining()) {
+      log.parser.warn(`altium: region with ${numOutline} vertices does not fit its record (${body.remaining()} bytes left); skipping it`);
+      continue;
+    }
 
     const vertices: { x: number; y: number }[] = [];
     for (let i = 0; i < numOutline; i++) {
-      if (body.remaining() <= 0) break;
       if (extended) {
         body.readUint8();                 // isRound (ignored — straight-line approximation only)
         const x = body.readInt32();
@@ -586,7 +593,6 @@ export function parseRegions6(buf: Uint8Array, forceExtended = false): ARegion6[
         body.skip(8 + 8);                 // angle1, angle2
         vertices.push({ x, y });
       } else {
-        if (body.remaining() < 16) break;
         const x = body.readFloat64();
         const y = body.readFloat64();
         vertices.push({ x, y });
